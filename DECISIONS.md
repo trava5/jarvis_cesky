@@ -154,3 +154,28 @@ normalizují s českou předvolbou `+420`.
   `JARVIS_WEATHER_LOCATION`.
 - Mezinárodní telefonní čísla zadaná s předvolbou zůstávají beze změny.
 - Ukázkové texty a výchozí karty UI používají Prahu.
+
+## ADR-006 — Citlivá konfigurace pouze v lokálním `.env`
+
+Datum: 2026-06-14
+Stav: `ACCEPTED`
+
+### Kontext
+
+API klíče byly ukládány v `config/api_keys.json`. Přestože byl soubor ignorován
+Gitem, samostatný JSON s tajnými hodnotami zvyšoval riziko nechtěného zveřejnění
+a neodpovídal běžnému způsobu předávání tajné konfigurace aplikaci.
+
+### Rozhodnutí
+
+API klíče a lokální konfigurační hodnoty aplikace se ukládají do kořenového
+souboru `.env`, který nesmí být verzován. Repozitář obsahuje pouze
+`.env.example` bez tajných hodnot. Proměnné nastavené operačním systémem mají
+při spuštění přednost před hodnotami v souboru.
+
+### Důsledky
+
+- `config/api_keys.json` se po úspěšné migraci odstraní.
+- Nastavení v grafickém rozhraní zapisuje spravované hodnoty do `.env`.
+- Instalační skript vytváří `.env` z bezpečné šablony.
+- Skutečné klíče se nesmí zapisovat do dokumentace, logů ani ukázkových souborů.

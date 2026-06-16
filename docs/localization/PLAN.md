@@ -16,6 +16,7 @@ Aktualizováno: 2026-06-14
 | L10N-008 | Zbývající moduly a úplná jazyková kontrola | DONE |
 | L10N-009 | Hlasové výstupy a česká výslovnost | TODO |
 | L10N-010 | Funkční regresní test lokalizované aplikace | TODO |
+| SEC-001 | Přesun citlivé konfigurace do `.env` | DONE |
 
 ## L10N-001 — Jádro a prompt
 
@@ -127,3 +128,15 @@ Stav: `TODO`
 - [ ] Ověřit alespoň jednu akci měnící stav.
 - [ ] Ověřit chybovou hlášku a reconnect.
 - [ ] Zapsat výsledek testu do historie.
+
+## SEC-001 — Citlivá konfigurace v `.env`
+
+Stav: `DONE`
+
+- [x] Zmapovat čtení a zápis API klíčů a související konfigurace.
+- [x] Přidat kořenový `.env` a bezpečnou šablonu `.env.example`.
+- [x] Převést `app_config.py` z JSON na proměnné prostředí.
+- [x] Zachovat ukládání nastavení z grafického rozhraní.
+- [x] Jednorázově migrovat existující hodnoty a odstranit starý JSON.
+- [x] Aktualizovat `.gitignore` a instalační skript.
+- [x] Ověřit syntaxi, migraci a načítání bez zveřejnění hodnot.

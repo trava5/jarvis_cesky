@@ -23,10 +23,10 @@ if not exist "venv" (
 
 call venv\Scripts\activate.bat
 
-REM Soubor s klíči API
-if not exist "config\api_keys.json" (
-    copy "config\api_keys.example.json" "config\api_keys.json" >nul
-    echo [*] Vytvořen config\api_keys.json - zadejte do něj klíč Gemini API
+REM Lokální proměnné prostředí a klíče API
+if not exist ".env" (
+    copy ".env.example" ".env" >nul
+    echo [*] Vytvořen .env - zadejte do něj klíč Gemini API
 )
 
 echo [*] Instaluji balíčky...

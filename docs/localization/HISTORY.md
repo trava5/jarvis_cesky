@@ -105,3 +105,41 @@ Známá omezení:
 
 - Hlas, TTS a česká výslovnost nejsou součástí této změny.
 - Úplný funkční regresní test integračních akcí zůstává v kroku `L10N-010`.
+
+## 2026-06-14 — SEC-001 — Citlivá konfigurace v `.env`
+
+Stav: `DONE`
+
+Provedeno:
+
+- Přidán lokální kořenový `.env` a verzovatelná šablona `.env.example` bez
+  skutečných tajných hodnot.
+- Přidány proměnné `GEMINI_API_KEY`, `YOUTUBE_API_KEY`,
+  `YOUTUBE_CHANNEL_HANDLE`, `JARVIS_VOICE` a ukázková
+  `JARVIS_WEATHER_LOCATION`.
+- `app_config.py` byl převeden z JSON konfigurace na načítání a bezpečně
+  uvozovaný zápis `.env`.
+- Zachováno stávající rozhraní konfiguračního modulu, a tím také ukládání z UI.
+- Přidána přednost proměnných nastavených operačním systémem.
+- Existující hodnoty byly jednorázově migrovány bez jejich výpisu a původní
+  `config/api_keys.json` byl po úspěšné migraci odstraněn.
+- `.gitignore` nyní výslovně ignoruje `.env`.
+- `setup.bat` vytváří `.env` z `.env.example`.
+- Odstraněna zastaralá šablona `config/api_keys.example.json`.
+
+Ověření:
+
+- `venv\Scripts\python.exe -m py_compile app_config.py`
+- `venv\Scripts\python.exe -m compileall -q main.py ui.py app_config.py
+  wakeup_listener.py actions memory`
+- Izolovaný test migrace, načtení, zápisu a přednosti systémové proměnné.
+- Ověřena existence `.env`, absence starého JSON a přítomnost očekávaných názvů
+  proměnných bez výpisu jejich hodnot.
+- Cílená kontrola verzovatelných souborů nenalezla pravděpodobný API klíč ani
+  jiný tajný řetězec.
+
+Známá omezení:
+
+- `.env` je lokální textový soubor, nikoli šifrované úložiště tajemství.
+- API klíč, který byl dříve uložen v prostém JSON, je vhodné preventivně
+  zneplatnit a vytvořit nový.
