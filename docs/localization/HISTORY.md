@@ -919,3 +919,40 @@ Známá omezení:
 
 - Dotazy na méně běžné časové výrazy mimo podporované měsíce, týdny a relativní
   formulace je dál vhodné předávat nástroji jako normalizované období.
+
+## 2026-06-18 — ACT-006 — Pevné mapování dotazů na kalendáře
+
+Stav: `DONE`
+
+Provedeno:
+
+- `get_calendar_events` nyní z textu dotazu odvozuje cílový kalendář podle pevného
+  pravidla:
+  `moje/já/můj` -> `travnicek.michal5@gmail.com`,
+  `Anežka` -> `travnickova.anezka@gmail.com`,
+  `Márinka` -> `marinka.travnickova`,
+  `rodina` -> `Rodina`.
+- Vyhledání kalendáře je tolerantní k aktuálnímu názvu/emailu vrácenému Googlem,
+  takže `travnickova.anezka@gmail.com` se v dostupných kalendářích správně najde
+  jako `anezka.travnickova5@gmail.com`.
+- Pokud je kalendář odvozený z dotazu, nepoužívá se zároveň jméno osoby jako
+  fulltextový filtr událostí.
+- `actions/tool_catalog.py` a `actions/002_calendar/README.md` byly aktualizovány
+  podle pevného mapování.
+
+Ověření:
+
+- Lokální smoke test inferencí pro vlastní kalendář, Anežku, Márinku a rodinu.
+- Reálný Google Calendar API test mapování názvů kalendářů.
+- Reálný Google Calendar API test pro `jaké mám události na srpen` vrátil událost
+  `Zubařka` z kalendáře `travnicek.michal5@gmail.com`.
+- Reálný Google Calendar API test pro `jaké události má rodina na srpen` vrátil
+  srpnové události z kalendáře `Rodina`.
+- Reálný Google Calendar API test pro `Anežka` a `Márinka` ověřil správné cílové
+  kalendáře.
+
+Známá omezení:
+
+- Pokud se skutečný Google kalendář přejmenuje tak, že už nepůjde spárovat podle
+  aliasů nebo emailových částí, bude potřeba aktualizovat mapování v
+  `actions/002_calendar/calendar.py`.

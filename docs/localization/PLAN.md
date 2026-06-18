@@ -25,7 +25,7 @@ Aktualizováno: 2026-06-17
 | ACT-003 | Katalog popisů nástrojů pro agenta | DONE |
 | ACT-004 | Zestručnění promptu a pravidlo katalogu pro nové akce | DONE |
 | ACT-005 | Rozšíření počasí o libovolné místo a předpověď | DONE |
-| ACT-006 | Revize Google Calendar akce | IN PROGRESS |
+| ACT-006 | Revize Google Calendar akce | DONE |
 | ARCH-001 | Oddělení nástrojů a běhových vlastností asistenta | DONE |
 | ARCH-002 | Číslované podadresáře pro actions a features | DONE |
 | ARCH-003 | Architektura sdíleného základu a specializovaných profilů | DONE |
@@ -42,7 +42,7 @@ Aktualizováno: 2026-06-17
 
 ## L10N-001 — Jádro a prompt
 
-Stav: `IN PROGRESS`
+Stav: `DONE`
 
 - [x] Přeložit popisy nástrojů v `main.py`.
 - [x] Přeložit provozní hlášky v `main.py`.
@@ -261,7 +261,7 @@ Stav: `DONE`
 - [x] Opravit čtení událostí tak, aby dotazy bez názvu kalendáře nečetly pouze primární kalendář.
 - [x] Opravit parsování celých českých vět v parametru `query`.
 - [x] Opravit parsování dotazů na české názvy měsíců.
-- [ ] Nastavit pevné mapování dotazů na osobní a rodinné kalendáře.
+- [x] Nastavit pevné mapování dotazů na osobní a rodinné kalendáře.
 - [x] Zapsat výsledek do historie.
 
 ## ARCH-001 — Oddělení nástrojů a běhových vlastností asistenta

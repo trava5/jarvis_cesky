@@ -35,6 +35,11 @@ Agent používá tuto akci přes nástroje popsané v `actions/tool_catalog.py`.
   příští týden, vyhledání názvu události nebo konkrétní kalendář. Pokud není
   uveden konkrétní kalendář, prohledá primární, vlastněné/zapisovatelné a vybrané
   kalendáře.
+- Dotazy na vlastní kalendář, Anežku, Márinku a rodinu se mapují pevně:
+  `moje/já/můj` -> `travnicek.michal5@gmail.com`,
+  `Anežka` -> `travnickova.anezka@gmail.com`,
+  `Márinka` -> `marinka.travnickova`,
+  `rodina` -> `Rodina`.
 - `add_calendar_event` přidává událost. Agent ho má volat až ve chvíli, kdy zná
   název, datum a čas začátku, trvání nebo konec a cílový kalendář.
 - `delete_calendar_event` odstraňuje událost po názvu a volitelném upřesnění času.

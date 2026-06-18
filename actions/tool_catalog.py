@@ -75,7 +75,8 @@ TOOL_CATALOG: dict[str, dict[str, Any]] = {
             "Načte události z Google Calendar. Použij, když se uživatel ptá na "
             "kalendář, schůzky, události, denní program, zítřek, příští týden "
             "nebo na termín konkrétní události. Umí pracovat s primárním "
-            "kalendářem i s konkrétním kalendářem podle názvu."
+            "kalendářem i s konkrétním kalendářem podle názvu. Dotazy na vlastní "
+            "kalendář, Anežku, Márinku a rodinu se mapují na pevně určené kalendáře."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -97,10 +98,11 @@ TOOL_CATALOG: dict[str, dict[str, Any]] = {
                     "type": "STRING",
                     "description": (
                         "Volitelný název kalendáře, například Anežka. Pokud chybí, "
-                        "prohledají se primární, vlastněné/zapisovatelné a vybrané kalendáře."
-                        " Vyplňuj jen tehdy, když uživatel výslovně řekne kalendář Anežka, "
-                        "kalendář Rodina apod. Pokud se ptá na osobu, například "
-                        "'jaké události má Anežka', nech calendar_name prázdný a jméno ponech v query."
+                        "modul si z query sám odvodí pevné mapování: moje/já/můj -> "
+                        "travnicek.michal5@gmail.com, Anežka -> travnickova.anezka@gmail.com, "
+                        "Márinka -> marinka.travnickova, rodina -> Rodina. Pokud query "
+                        "neobsahuje žádný z těchto aliasů, prohledají se primární, "
+                        "vlastněné/zapisovatelné a vybrané kalendáře."
                     ),
                 },
             },
