@@ -18,6 +18,11 @@ Tento seznam projdi před označením kroku jako `DONE`.
 - [ ] České texty používají UTF-8.
 - [ ] Nové texty neobsahují zbytečné anglicismy nebo turecké výrazy.
 - [ ] Detekce chyb a úspěchu stále rozpoznává návraty závislých modulů.
+- [ ] Pokud vznikla nebo byla zapojena nová akce, má záznam v `actions/tool_catalog.py`.
+- [ ] Pokud vznikl komunikační kanál, bridge nebo hlasový provider, je umístěný ve `features`.
+- [ ] Nová nebo revidovaná akce je uložená v `actions/NNN_name`.
+- [ ] Nová nebo revidovaná feature je uložená v `features/NNN_name`.
+- [ ] Pokud změna souvisí se specializací agenta, je popsaná v `profiles`, ne ve sdílené feature.
 
 ## Ověření
 

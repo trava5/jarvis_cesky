@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 JARVIS Windows — jádro hlasového asistenta v reálném čase
-Vytvořil Alp Ünlü — @alppunlu
 Pracovní postup přizpůsobený prostředí Windows
 """
 
@@ -11,27 +10,56 @@ import threading
 import traceback
 import os
 import re
+import uuid
+from importlib import import_module
 from pathlib import Path
 
 import pyaudio  # type: ignore[reportMissingModuleSource]
 from google import genai  # type: ignore[reportMissingImports]
 from google.genai import types  # type: ignore[reportMissingImports]
 
-from app_config import get_app_config_value
+from app_config import get_app_config_value, save_app_config
 from ui import JarvisUI
-from memory.memory_manager import load_memory, update_memory, delete_memory, format_memory_for_prompt
+from memory.memory_manager import (
+    load_memory,
+    update_memory,
+    delete_memory,
+    format_memory_for_prompt,
+    save_conversation_turn,
+    save_long_term_decision,
+    format_long_term_decisions_for_prompt,
+)
 from actions.open_app import open_app
 from actions.sys_info  import sys_info
-from actions.calendar import get_calendar_events, add_calendar_event, delete_calendar_event
 from actions.reminders import get_reminders, add_reminder
 from actions.browser   import browser_control
 from actions.shell     import shell_run
 from actions.whatsapp  import send_whatsapp_message, save_whatsapp_contact
 from actions.media     import play_media
-from actions.weather   import get_weather_summary
+from actions.action_loader import load_action_function
+from actions.tool_catalog import get_tool_declaration
 from actions.screen_vision import analyze_screen
 from actions.youtube_stats import get_youtube_channel_report
 from wakeup_listener import WakeGestureListener
+
+elevenlabs_voice = import_module("features.001_elevenlabs_voice.provider")
+
+get_weather_summary = load_action_function(
+    "actions.001_weather.weather",
+    "get_weather_summary",
+)
+get_calendar_events = load_action_function(
+    "actions.002_calendar.calendar",
+    "get_calendar_events",
+)
+add_calendar_event = load_action_function(
+    "actions.002_calendar.calendar",
+    "add_calendar_event",
+)
+delete_calendar_event = load_action_function(
+    "actions.002_calendar.calendar",
+    "delete_calendar_event",
+)
 
 # ── Paths ───────────────────────────────────────────────────────────────────
 BASE_DIR        = Path(__file__).resolve().parent
@@ -48,6 +76,7 @@ FORMAT           = pyaudio.paInt16
 CHANNELS         = 1
 SEND_SAMPLE_RATE = 16000
 RECV_SAMPLE_RATE = 24000
+ELEVENLABS_PCM_SAMPLE_RATE = 24000
 CHUNK_SIZE       = 1024
 pya              = pyaudio.PyAudio()
 
@@ -81,119 +110,10 @@ TOOL_DECLARATIONS = [
             "required": ["query"]
         }
     },
-    {
-        "name": "get_weather",
-        "description": (
-            "Shrne aktuální počasí. Výchozí lokalitou je Praha. "
-            "Použij, když se uživatel ptá na počasí, teplotu nebo déšť."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "location": {
-                    "type": "STRING",
-                    "description": "Město nebo lokalita. Pokud zůstane prázdná, použije se Praha."
-                }
-            }
-        }
-    },
-    {
-        "name": "get_calendar_events",
-        "description": (
-            "Načte události z Kalendáře Google. "
-            "Shrne dnešní či zítřejší události, následující událost nebo nadcházející program. "
-            "Použij při dotazu na schůzky, kalendář, agendu, události nebo denní program."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "query": {
-                    "type": "STRING",
-                    "description": (
-                        "today | tomorrow | next | agenda | week nebo přirozený text, například "
-                        "'následujících 30 dní', '2 týdny', 'tento měsíc', 'příští měsíc'"
-                    )
-                },
-                "limit": {
-                    "type": "NUMBER",
-                    "description": "Maximální počet událostí"
-                }
-            },
-            "required": ["query"]
-        }
-    },
-    {
-        "name": "add_calendar_event",
-        "description": (
-            "Přidá novou událost do Kalendáře Google. "
-            "Použij, když chce uživatel vytvořit schůzku, termín nebo jinou událost. "
-            "Začátek předej jako skutečné datum a čas; pokud není uveden konec, použije se výchozí délka."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "title": {
-                    "type": "STRING",
-                    "description": "Název události, například 'Návštěva zubaře'"
-                },
-                "start_iso": {
-                    "type": "STRING",
-                    "description": "Datum a čas začátku ve formátu ISO nebo yyyy-MM-dd HH:mm."
-                },
-                "end_iso": {
-                    "type": "STRING",
-                    "description": "Volitelné datum a čas konce."
-                },
-                "location": {
-                    "type": "STRING",
-                    "description": "Volitelné místo události."
-                },
-                "notes": {
-                    "type": "STRING",
-                    "description": "Volitelné poznámky k události."
-                },
-                "calendar_name": {
-                    "type": "STRING",
-                    "description": "Volitelný název cílového kalendáře."
-                },
-                "all_day": {
-                    "type": "BOOLEAN",
-                    "description": "Hodnota true vytvoří celodenní událost."
-                }
-            },
-            "required": ["title", "start_iso"]
-        }
-    },
-    {
-        "name": "delete_calendar_event",
-        "description": (
-            "Odstraní událost z Kalendáře Google. "
-            "Použij, když chce uživatel odstranit schůzku, termín nebo záznam v kalendáři. "
-            "Pokud existuje více událostí se stejným názvem, předej skutečné datum a čas začátku."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "title": {
-                    "type": "STRING",
-                    "description": "Název odstraňované události, například 'Návštěva zubaře'"
-                },
-                "start_iso": {
-                    "type": "STRING",
-                    "description": "Volitelné datum a čas pro rozlišení více událostí se stejným názvem."
-                },
-                "calendar_name": {
-                    "type": "STRING",
-                    "description": "Volitelný název kalendáře"
-                },
-                "delete_all_matches": {
-                    "type": "BOOLEAN",
-                    "description": "Hodnota true odstraní všechny odpovídající události"
-                }
-            },
-            "required": ["title"]
-        }
-    },
+    get_tool_declaration("get_weather"),
+    get_tool_declaration("get_calendar_events"),
+    get_tool_declaration("add_calendar_event"),
+    get_tool_declaration("delete_calendar_event"),
     {
         "name": "get_reminders",
         "description": (
@@ -368,7 +288,10 @@ TOOL_DECLARATIONS = [
     },
     {
         "name": "save_memory",
-        "description": "Uloží důležitou informaci o uživateli do trvalé paměti. Použij tiše při zjištění jména, preferencí, projektů a podobně.",
+        "description": (
+            "Uloží běžnou dlouhodobou faktickou informaci o uživateli, například jméno, preference nebo projekt. "
+            "Nepoužívej pro trvalá rozhodnutí; ta ukládej pouze nástrojem save_long_term_decision po výslovném potvrzení uživatele."
+        ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
@@ -380,6 +303,44 @@ TOOL_DECLARATIONS = [
                 "value": {"type": "STRING", "description": "Ukládaná hodnota"}
             },
             "required": ["category", "key", "value"]
+        }
+    },
+    {
+        "name": "save_long_term_decision",
+        "description": (
+            "Uloží dlouhodobé rozhodnutí do samostatné dlouhodobé paměti. "
+            "Použij pouze tehdy, když bylo rozhodnutí nejprve výslovně navrženo a uživatel jej následně jasně potvrdil. "
+            "Nepoužívej pro běžnou provozní konverzaci ani pro nepotvrzené návrhy."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "title": {
+                    "type": "STRING",
+                    "description": "Krátký název rozhodnutí."
+                },
+                "decision": {
+                    "type": "STRING",
+                    "description": "Jednoznačný text potvrzeného rozhodnutí."
+                },
+                "rationale": {
+                    "type": "STRING",
+                    "description": "Volitelný důvod nebo kontext rozhodnutí."
+                },
+                "source": {
+                    "type": "STRING",
+                    "description": "Volitelný odkaz na zdroj v konverzaci nebo modul, kterého se rozhodnutí týká."
+                },
+                "confirmed": {
+                    "type": "BOOLEAN",
+                    "description": "Musí být true pouze po výslovném potvrzení uživatelem."
+                },
+                "confirmation_text": {
+                    "type": "STRING",
+                    "description": "Doslovný nebo stručně citovaný text uživatelského potvrzení."
+                }
+            },
+            "required": ["title", "decision", "confirmed", "confirmation_text"]
         }
     },
     {
@@ -491,21 +452,69 @@ class JarvisLive:
         self.ui             = ui
         self.session        = None
         self.audio_in_queue = None
+        self.tts_text_queue = None
         self.out_queue      = None
         self._loop          = None
         self._is_speaking   = False
         self._speaking_lock = threading.Lock()
+        self._session_id    = uuid.uuid4().hex
+        self._voice_restart_requested = False
 
         self.ui.on_text_command  = self._on_text_command
         self.ui.on_pause_toggle  = self._on_pause_toggle
+        self.ui.on_voice_change  = self._on_voice_change
+        self.ui.on_voice_provider_change = self._on_voice_provider_change
         self.ui.on_effects_state_change = self._on_effects_state_change
         self._paused             = False
 
     def _on_pause_toggle(self, paused: bool):
         self._paused = paused
 
+    def _on_voice_change(self, voice: str):
+        if self._uses_elevenlabs_voice():
+            self.ui.write_log(
+                "SYS: Hlas Gemini byl uložen. ElevenLabs používá ELEVENLABS_VOICE_ID z .env."
+            )
+            return
+        self.ui.write_log(f"SYS: Přepínám hlas na {voice}. Obnovuji hlasovou relaci...")
+        if not self._loop or not self.session:
+            return
+        self._voice_restart_requested = True
+        asyncio.run_coroutine_threadsafe(self._restart_session_for_voice_change(), self._loop)
+
+    def _on_voice_provider_change(self, provider: str):
+        normalized = "elevenlabs" if str(provider).strip().lower() == "elevenlabs" else "gemini"
+        label = "ElevenLabs" if normalized == "elevenlabs" else "Gemini Live"
+        self.ui.write_log(f"SYS: Přepínám hlasový výstup na {label}. Obnovuji hlasovou relaci...")
+        if not self._loop or not self.session:
+            return
+        self._voice_restart_requested = True
+        asyncio.run_coroutine_threadsafe(self._restart_session_for_voice_change(), self._loop)
+
+    async def _restart_session_for_voice_change(self):
+        try:
+            if self.session:
+                await self.session.close()
+        except Exception as exc:
+            self.ui.write_debug(f"Obnova hlasové relace: {exc}", level="WARN")
+
     def _on_effects_state_change(self, enabled: bool):
         pass
+
+    def _active_voice_provider(self) -> str:
+        provider = str(get_app_config_value("voice_provider", "auto") or "auto").strip().lower()
+        if provider == "elevenlabs":
+            return "elevenlabs"
+        if provider in {"auto", "gemini"}:
+            return "gemini"
+        self.ui.write_debug(
+            f"Neznámý hlasový provider '{provider}', používám Gemini Live.",
+            level="WARN",
+        )
+        return "gemini"
+
+    def _uses_elevenlabs_voice(self) -> bool:
+        return self._active_voice_provider() == "elevenlabs"
 
     def _focus_ui_section_for_tool(self, tool_name: str, args: dict):
         if tool_name == "sys_info":
@@ -517,10 +526,17 @@ class JarvisLive:
         elif tool_name == "get_weather":
             self.ui.focus_panel("weather", duration_ms=5600)
 
+    def _remember_turn(self, role: str, content: str, metadata: dict | None = None):
+        try:
+            save_conversation_turn(role, content, self._session_id, metadata)
+        except Exception as exc:
+            self.ui.write_debug(f"Paměť konverzace: {exc}", level="WARN")
+
     def _on_text_command(self, text: str):
         if self._paused:
             return
         self.ui.write_log(f"Vy: {text}")
+        self._remember_turn("user", text, {"source": "text"})
         if not self._loop or not self.session:
             self.ui.write_log("ERR: Připojení JARVIS ještě není připravené.")
             return
@@ -628,6 +644,7 @@ class JarvisLive:
     def _build_config(self) -> types.LiveConnectConfig:
         memory  = load_memory()
         mem_str = format_memory_for_prompt(memory)
+        decisions_str = format_long_term_decisions_for_prompt()
         sys_p   = load_system_prompt()
         now     = datetime.datetime.now()
         time_ctx = f"[AKTUÁLNÍ ČAS]\n{now.strftime('%d.%m.%Y — %H:%M')}\n\n"
@@ -635,22 +652,25 @@ class JarvisLive:
         parts = [time_ctx]
         if mem_str:
             parts.append(mem_str + "\n\n")
+        if decisions_str:
+            parts.append(decisions_str + "\n\n")
         parts.append(sys_p)
 
-        return types.LiveConnectConfig(
-            response_modalities=["AUDIO"],
-            output_audio_transcription={},
-            input_audio_transcription={},
-            system_instruction="\n".join(parts),
-            tools=[{"function_declarations": TOOL_DECLARATIONS}],
-            speech_config=types.SpeechConfig(
-                voice_config=types.VoiceConfig(
-                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name=str(get_app_config_value("voice", "Charon") or "Charon")
-                    )
+        config_kwargs = {
+            "response_modalities": ["AUDIO"],
+            "output_audio_transcription": {},
+            "input_audio_transcription": {},
+            "system_instruction": "\n".join(parts),
+            "tools": [{"function_declarations": TOOL_DECLARATIONS}],
+        }
+        config_kwargs["speech_config"] = types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                    voice_name=str(get_app_config_value("voice", "Charon") or "Charon")
                 )
-            ),
+            )
         )
+        return types.LiveConnectConfig(**config_kwargs)
 
     async def _execute_tool(self, fc) -> types.FunctionResponse:
         name = fc.name
@@ -679,6 +699,18 @@ class JarvisLive:
                     args.get("match_text", ""),
                 )
 
+            elif name == "save_long_term_decision":
+                result = save_long_term_decision(
+                    args.get("title", ""),
+                    args.get("decision", ""),
+                    args.get("rationale", ""),
+                    args.get("source", ""),
+                    bool(args.get("confirmed", False)),
+                    "user",
+                    args.get("confirmation_text", ""),
+                    {"session_id": self._session_id},
+                )
+
             elif name == "open_app":
                 r = await loop.run_in_executor(
                     None, lambda: open_app(args.get("app_name", "")))
@@ -693,7 +725,13 @@ class JarvisLive:
             elif name == "get_weather":
                 self._focus_ui_section_for_tool(name, args)
                 r = await loop.run_in_executor(
-                    None, lambda: get_weather_summary(args.get("location") or None))
+                    None,
+                    lambda: get_weather_summary(
+                        args.get("location") or None,
+                        args.get("mode", "current"),
+                        int(args.get("days", 3) or 3),
+                    ),
+                )
                 result = r or "Informace o počasí byly načteny."
 
             elif name == "get_calendar_events":
@@ -702,6 +740,7 @@ class JarvisLive:
                     lambda: get_calendar_events(
                         args.get("query", "today"),
                         int(args.get("limit", 6) or 6),
+                        args.get("calendar_name", ""),
                     ),
                 )
                 result = r or "Informace z kalendáře byly načteny."
@@ -717,6 +756,7 @@ class JarvisLive:
                         args.get("location", ""),
                         args.get("calendar_name", ""),
                         bool(args.get("all_day", False)),
+                        int(args.get("duration_minutes", 60) or 60),
                     ),
                 )
                 result = r or "Událost byla přidána do kalendáře."
@@ -847,6 +887,11 @@ class JarvisLive:
         if not tool_failed and not self.ui.muted:
             self.ui.set_state("LISTENING")
 
+        self._remember_turn(
+            "tool",
+            f"{name}: {result}",
+            {"tool_name": name, "args": args, "failed": tool_failed},
+        )
         print(f"[JARVIS] 📤 {name} → {str(result)[:80]}")
         return types.FunctionResponse(
             id=fc.id, name=name,
@@ -883,13 +928,19 @@ class JarvisLive:
     async def _receive_audio(self):
         print("[JARVIS] 👂 Příjem spuštěn")
         out_buf, in_buf = [], []
+        text_out_buf = []
         output_noise = False
         output_noise_samples = []
         try:
             while True:
                 async for response in self.session.receive():
-                    if response.data:
+                    if response.data and not self._uses_elevenlabs_voice():
                         self.audio_in_queue.put_nowait(response.data)
+
+                    if response.text:
+                        text = str(response.text).strip()
+                        if text:
+                            text_out_buf.append(text)
 
                     if response.server_content:
                         sc = response.server_content
@@ -915,16 +966,23 @@ class JarvisLive:
                         if sc.turn_complete:
                             # Sentinel přepne stav SPEAKING na LISTENING
                             # po přehrání všech bloků ve zvukové frontě.
-                            self.audio_in_queue.put_nowait(None)
+                            if not self._uses_elevenlabs_voice():
+                                self.audio_in_queue.put_nowait(None)
 
                             full_in = " ".join(in_buf).strip()
                             if full_in:
                                 self.ui.write_log(f"Vy: {full_in}")
+                                self._remember_turn("user", full_in, {"source": "voice"})
                             in_buf = []
 
                             full_out = " ".join(out_buf).strip()
+                            if not full_out:
+                                full_out = " ".join(text_out_buf).strip()
                             if full_out:
                                 self.ui.write_log(f"JARVIS: {full_out}")
+                                self._remember_turn("assistant", full_out, {"source": "voice"})
+                                if self._uses_elevenlabs_voice() and self.tts_text_queue:
+                                    self.tts_text_queue.put_nowait(full_out)
                                 if output_noise_samples:
                                     self.ui.write_debug(
                                         "Částečně filtrovaný přepis zvuku: " + " | ".join(output_noise_samples),
@@ -939,6 +997,7 @@ class JarvisLive:
                                     )
                                 self.ui.set_state("ERROR")
                             out_buf = []
+                            text_out_buf = []
                             output_noise = False
                             output_noise_samples = []
 
@@ -952,6 +1011,8 @@ class JarvisLive:
                             function_responses=fn_responses)
 
         except Exception as e:
+            if self._voice_restart_requested and "1000" in str(e):
+                return
             print(f"[JARVIS] ❌ Příjem: {e}")
             traceback.print_exc()
             raise
@@ -979,6 +1040,62 @@ class JarvisLive:
             self.set_speaking(False)
             stream.close()
 
+    async def _play_elevenlabs_text(self):
+        print("[JARVIS] 🔊 ElevenLabs hlasový výstup spuštěn")
+        stream = await asyncio.to_thread(
+            pya.open,
+            format=FORMAT,
+            channels=CHANNELS,
+            rate=ELEVENLABS_PCM_SAMPLE_RATE,
+            output=True,
+        )
+        try:
+            while True:
+                text = await self.tts_text_queue.get()
+                if not text:
+                    continue
+                self.set_speaking(True)
+                try:
+                    cfg = elevenlabs_voice.load_config()
+                    pcm_cfg = elevenlabs_voice.ElevenLabsVoiceConfig(
+                        api_key=cfg.api_key,
+                        voice_id=cfg.voice_id,
+                        model_id=cfg.model_id,
+                        output_format="pcm_24000",
+                    )
+                    audio = await asyncio.to_thread(
+                        elevenlabs_voice.synthesize_to_bytes,
+                        text,
+                        pcm_cfg,
+                    )
+                    await asyncio.to_thread(stream.write, audio)
+                except elevenlabs_voice.ElevenLabsPaymentRequiredError as exc:
+                    self.ui.write_log(
+                        "ERR: ElevenLabs účet nemá dostupný kredit nebo vyžaduje platbu. "
+                        "Přepínám hlasový výstup zpět na Gemini Live."
+                    )
+                    self.ui.write_debug(str(exc), level="WARN")
+                    save_app_config({"voice_provider": "gemini"})
+                    if hasattr(self.ui, "set_voice_provider"):
+                        self.ui.set_voice_provider("gemini")
+                    self._voice_restart_requested = True
+                    await self._restart_session_for_voice_change()
+                    break
+                except elevenlabs_voice.ElevenLabsVoiceError as exc:
+                    self.ui.write_log(f"ERR: ElevenLabs hlasový výstup selhal: {exc}")
+                    self.ui.set_state("ERROR")
+                except Exception as exc:
+                    self.ui.write_log(f"ERR: ElevenLabs hlasový výstup selhal: {exc}")
+                    self.ui.set_state("ERROR")
+                finally:
+                    self.set_speaking(False)
+        except Exception as e:
+            print(f"[JARVIS] ❌ ElevenLabs zvuk: {e}")
+            raise
+        finally:
+            self.set_speaking(False)
+            stream.close()
+
     async def run(self):
         client = genai.Client(
             api_key=get_api_key(),
@@ -995,6 +1112,7 @@ class JarvisLive:
                 print("[JARVIS] 🔌 Připojování...")
                 self.ui.set_state("THINKING")
                 config = self._build_config()
+                uses_elevenlabs = self._uses_elevenlabs_voice()
 
                 async with (
                     client.aio.live.connect(model=LIVE_MODEL, config=config) as session,
@@ -1003,18 +1121,49 @@ class JarvisLive:
                     self.session        = session
                     self._loop          = asyncio.get_event_loop()
                     self.audio_in_queue = asyncio.Queue()
+                    self.tts_text_queue = asyncio.Queue()
                     self.out_queue      = asyncio.Queue(maxsize=10)
 
-                    print("[JARVIS] ✅ Připojeno.")
+                    provider_label = "ElevenLabs" if uses_elevenlabs else "Gemini Live"
+                    print(f"[JARVIS] ✅ Připojeno. Hlas: {provider_label}")
                     self.ui.set_state("LISTENING")
-                    self.ui.write_log("SYS: JARVIS je připraven. Poslouchám...")
+                    self.ui.write_log(f"SYS: JARVIS je připraven. Hlas: {provider_label}. Poslouchám...")
 
                     tg.create_task(self._send_realtime())
                     tg.create_task(self._listen_audio())
                     tg.create_task(self._receive_audio())
-                    tg.create_task(self._play_audio())
+                    if uses_elevenlabs:
+                        tg.create_task(self._play_elevenlabs_text())
+                    else:
+                        tg.create_task(self._play_audio())
+
+                self.session = None
+                self.audio_in_queue = None
+                self.tts_text_queue = None
+                self.out_queue = None
+                if self._voice_restart_requested:
+                    self._voice_restart_requested = False
+                    self.set_speaking(False)
+                    self.ui.set_state("THINKING")
+                    self.ui.write_log(
+                        f"SYS: Hlas {get_app_config_value('voice', 'Charon')} bude aktivní po obnovení spojení."
+                    )
+                    await asyncio.sleep(0.5)
 
             except Exception as e:
+                self.session = None
+                self.audio_in_queue = None
+                self.tts_text_queue = None
+                self.out_queue = None
+                if self._voice_restart_requested:
+                    self._voice_restart_requested = False
+                    self.set_speaking(False)
+                    self.ui.set_state("THINKING")
+                    self.ui.write_log(
+                        f"SYS: Hlas {get_app_config_value('voice', 'Charon')} bude aktivní po obnovení spojení."
+                    )
+                    await asyncio.sleep(0.5)
+                    continue
                 print(f"[JARVIS] ⚠️ {e}")
                 traceback.print_exc()
                 self.set_speaking(False)

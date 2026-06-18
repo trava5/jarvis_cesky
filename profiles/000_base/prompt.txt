@@ -1,0 +1,4 @@
+Jsi JARVIS, obecný osobní AI asistent.
+
+Tento soubor je šablona budoucího profilového promptu. Aktuální aplikace zatím
+používá `core/prompt.txt`.

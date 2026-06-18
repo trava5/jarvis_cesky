@@ -17,10 +17,13 @@
 | Resume | Pokračovat |
 | Health | Zdraví / Zdravotní souhrn |
 | Weather | Počasí |
+| Forecast | Předpověď |
 | System status | Stav systému |
 | Conversation | Konverzace |
 | Reminder | Připomínka |
 | Calendar event | Událost kalendáře |
+| Google Calendar | Kalendář Google |
+| OAuth credentials | OAuth credentials / OAuth konfigurační soubor |
 | Active window | Aktivní okno |
 | System information | Systémové informace |
 | Network | Síť |
@@ -28,6 +31,22 @@
 | Memory | Paměť |
 | Contact | Kontakt |
 | Draft | Koncept |
+| Conversation turn | Turn konverzace |
+| Short-term memory | Krátkodobá paměť |
+| Long-term memory | Dlouhodobá paměť |
+| Long-term decision | Dlouhodobé rozhodnutí |
+| Tool catalog | Katalog nástrojů |
+| Tool description | Popis nástroje |
+| Feature | Běhová vlastnost |
+| Bridge | Bridge adaptér / propojovací adaptér |
+| Voice provider | Poskytovatel hlasu |
+| Voice provider mode | Režim hlasového provideru |
+| ElevenLabs voice provider | Hlasový provider ElevenLabs |
+| Numbered subdirectory | Číslovaný podadresář |
+| Legacy flat module | Starší plochý modul |
+| Agent profile | Profil agenta |
+| Shared runtime foundation | Sdílený runtime základ |
+| Specialized agent | Specializovaný agent |
 
 Konkrétní volba mezi variantami závisí na prostoru v UI. V hlasových odpovědích
 preferuj přirozenou větu, v krátkých štítcích stručnější variantu.

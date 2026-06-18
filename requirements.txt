@@ -1,5 +1,8 @@
 # JARVIS Windows - požadované balíčky
 google-genai
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
 SpeechRecognition
 pyaudio
 psutil
@@ -7,3 +10,4 @@ Pillow
 requests
 pyperclip
 mss
+tzdata

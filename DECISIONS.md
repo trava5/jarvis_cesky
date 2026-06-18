@@ -179,3 +179,244 @@ při spuštění přednost před hodnotami v souboru.
 - Nastavení v grafickém rozhraní zapisuje spravované hodnoty do `.env`.
 - Instalační skript vytváří `.env` z bezpečné šablony.
 - Skutečné klíče se nesmí zapisovat do dokumentace, logů ani ukázkových souborů.
+
+## ADR-007 — Lokální SQLite paměť konverzací
+
+Datum: 2026-06-16
+Stav: `ACCEPTED`
+
+### Kontext
+
+Původní paměť asistenta ukládala pouze explicitně vybrané informace do lokálního
+JSON souboru. Neuchovávala průběh konverzací, neuměla transakční zápis a při
+růstu dat by bylo neefektivní vkládat celou paměť do systémového promptu.
+
+### Rozhodnutí
+
+Paměť se začne ukládat do lokální SQLite databáze v adresáři `memory`. První
+krok zachová stávající rozhraní pro dlouhodobé fakty a doplní ukládání
+konverzačních turnů. Vektorové embeddingy a sémantické vyhledávání budou
+navazující rozšíření nad stejným lokálním úložištěm.
+
+### Důsledky
+
+- Databázový soubor je lokální runtime data a nesmí se verzovat.
+- Současné nástroje `save_memory` a `delete_memory` zůstanou kompatibilní.
+- Do promptu se zatím stále vkládají dlouhodobé fakty; výběr relevantní paměti
+  podle dotazu bude řešen v dalším kroku.
+- Budoucí vektorový index musí respektovat lokální charakter dat a nesmí
+  vyžadovat externí službu jako povinnou závislost.
+
+## ADR-008 — Oddělení krátkodobé paměti a dlouhodobých rozhodnutí
+
+Datum: 2026-06-17
+Stav: `ACCEPTED`
+
+### Kontext
+
+Provozní konverzace a trvalá rozhodnutí mají rozdílnou hodnotu i životnost.
+Konverzační záznamy slouží pro krátkodobou návaznost a vyhledávání, zatímco
+potvrzená rozhodnutí mají charakter pravidel podobný projektovým ADR a nesmí se
+automaticky ztrácet.
+
+### Rozhodnutí
+
+Provozní konverzační turny se ukládají do krátkodobé paměti a mohou být
+automaticky mazány po jednom měsíci. Dlouhodobá rozhodnutí se ukládají do
+samostatné tabulky až po výslovném návrhu a potvrzení uživatelem. Tato
+dlouhodobá rozhodnutí se automaticky nepromazávají.
+
+### Důsledky
+
+- Krátkodobá paměť je vhodná pro běžné konverzační souvislosti, ladicí dohled a
+  budoucí sémantické vyhledávání.
+- Dlouhodobá paměť rozhodnutí je stabilní kontext a musí být v promptu oddělena
+  od běžných faktů.
+- Změna nebo zrušení dřívějšího rozhodnutí se má provést novým potvrzeným
+  rozhodnutím, nikoli automatickým přepsáním historie.
+
+## ADR-009 — Akční moduly jako místo pro funkce asistenta
+
+Datum: 2026-06-17
+Stav: `ACCEPTED`
+
+### Kontext
+
+Asistent bude postupně dostávat další schopnosti, volání funkcí a případně
+specializované agentní integrace. Bez jednotného místa by se implementace
+rozptýlila mezi `main.py`, prompt, UI a pomocné moduly, což by ztížilo revizi,
+testování a zapojování nových nástrojů.
+
+### Rozhodnutí
+
+Všechny nové schopnosti asistenta, které mají být volané jako funkce modelu
+nebo jako integrační/agentní akce, se implementují ve složce `actions`.
+`main.py` zůstává registr nástrojů, dispatcher a orchestrace běhu; nemá
+obsahovat vlastní doménovou logiku nové funkce.
+
+### Důsledky
+
+- Každá nová schopnost má mít samostatný modul nebo jasně související rozšíření
+  existujícího modulu v `actions`.
+- Nový nástroj musí být zapojen do deklarací nástrojů v `main.py`, dispatcheru a
+  podle potřeby do `core/prompt.txt`.
+- Nové externí závislosti se zapisují do `requirements.txt` a musí mít
+  ověřitelný fallback nebo srozumitelnou chybovou zprávu.
+- Akční moduly musí být testovatelné izolovaně bez spuštění celé živé relace.
+
+## ADR-010 — Číslování ověřených akčních modulů
+
+Datum: 2026-06-17
+Stav: `ACCEPTED`
+
+### Kontext
+
+Akční moduly budou procházet postupnou revizí. Po ověření má být na první
+pohled vidět, které moduly už revizí prošly. Současně musí zůstat zachovaný
+standardní Python import v `main.py`.
+
+### Rozhodnutí
+
+Ověřené akční moduly se přejmenovávají do importovatelného tvaru
+`_NNN_nazev.py`, například `_001_weather.py`. Čistý tvar `1_weather.py` se
+nepoužívá, protože název modulu začínající číslicí nelze běžně importovat
+zápisem `from actions.1_weather import ...`.
+
+### Důsledky
+
+- Po přejmenování modulu se vždy aktualizují importy v `main.py` a případné
+  další reference.
+- Číslo znamená, že modul prošel revizí a základním ověřením.
+- Neočíslované moduly zůstávají čekající na revizi.
+
+## ADR-011 — Katalog popisů nástrojů pro agenta
+
+Datum: 2026-06-17
+Stav: `ACCEPTED`
+
+### Kontext
+
+Agent potřebuje ke každému nástroji jasný popis, kdy ho má použít, jaké
+parametry očekává a jaká má známá omezení. Pokud jsou tyto informace pouze v
+`main.py`, promptu nebo komentářích u implementace, snadno se při přidávání
+dalších funkcí rozcházejí.
+
+### Rozhodnutí
+
+Popisy nástrojů volaných agentem se ukládají do katalogu `actions/tool_catalog.py`.
+Katalog obsahuje strojovou deklaraci pro model i doplňující poznámky pro revizi:
+modul, funkci, stav ověření, příklady použití, doporučené situace pro volání a
+známá omezení. Při vytvoření nebo zapojení nové akce musí vzniknout odpovídající
+záznam v katalogu.
+
+### Důsledky
+
+- `actions` je nejen místo implementace akcí, ale i místo jejich popisu pro agenta.
+- Nová akce není považovaná za dokončenou, dokud nemá záznam v
+  `actions/tool_catalog.py`.
+- `main.py` má používat katalog jako zdroj deklarací nástrojů vždy, když je daná
+  akce do katalogu doplněna.
+- Prompt může obsahovat stručné shrnutí schopností, ale detailní pravidla pro
+  volání konkrétních funkcí se drží v katalogu.
+- U ověřených akcí musí katalog uvádět také známá omezení, aby agent nevolal
+  funkci pro scénáře, které zatím neumí pokrýt.
+
+## ADR-012 — Oddělení nástrojů a běhových vlastností asistenta
+
+Datum: 2026-06-17
+Stav: `ACCEPTED`
+
+### Kontext
+
+Projekt bude kromě nástrojů volaných agentem obsahovat také komunikační kanály,
+hlasové moduly a další běhové integrace. Telegram bridge nebo hlasový provider
+ElevenLabs nejsou nástroje, které má model volat kvůli splnění uživatelského
+úkolu; jsou to způsoby, jak se k agentovi připojit nebo jak agent vstup/výstup
+zpracuje.
+
+### Rozhodnutí
+
+Adresář `actions` obsahuje pouze tools, tedy funkce volané agentem přes
+tool/function calling. Běhové vlastnosti asistenta, komunikační kanály,
+hlasové moduly, bridge adaptéry a poskytovatelé služeb se ukládají do adresáře
+`features`.
+
+### Důsledky
+
+- Telegram bridge patří do `features`, ne do `actions`.
+- Budoucí hlasový modul ElevenLabs patří do `features`, pokud nebude sám
+  vystavený jako nástroj volaný agentem.
+- Pokud některá běhová vlastnost zároveň nabídne agentovi nový nástroj, její
+  volatelná akce musí být oddělena do `actions` a popsána v
+  `actions/tool_catalog.py`.
+- `actions/tool_catalog.py` zůstává katalogem pouze pro nástroje dostupné
+  agentovi, ne pro všechny interní integrace projektu.
+
+## ADR-013 — Číslované podadresáře pro akce a běhové vlastnosti
+
+Datum: 2026-06-17
+Stav: `ACCEPTED`
+
+### Kontext
+
+Některé akce a běhové vlastnosti mohou časem obsahovat více souborů: vlastní
+implementaci, testy, dokumentaci, konfigurační šablony, pomocné adaptéry nebo
+assets. Jednosouborové ukládání v kořeni `actions` by se u složitějších funkcí
+rychle stalo nepřehledné.
+
+### Rozhodnutí
+
+Nové a revidované akce se ukládají do vlastních číslovaných podadresářů ve tvaru
+`actions/NNN_name`, například `actions/001_weather`. Nové a revidované běhové
+vlastnosti se ukládají stejným způsobem do `features/NNN_name`. Jednotlivé
+soubory implementace, dokumentace a podpůrných částí se ukládají až uvnitř
+daného podadresáře.
+
+Číslovaný adresář může začínat číslicí, protože se nebude importovat přímým
+syntaktickým zápisem `from actions.001_weather ...`. Kód používá import přes
+loader nebo `importlib`, například modulovou cestu `actions.001_weather.weather`.
+
+### Důsledky
+
+- ADR-010 o jednosouborovém tvaru `_NNN_name.py` je pro nové změny nahrazeno tímto
+  adresářovým pravidlem.
+- Ověřená weather akce je uložena v `actions/001_weather`.
+- `actions/tool_catalog.py` musí u každého nástroje ukazovat na skutečný modul
+  uvnitř číslovaného podadresáře.
+- Starší ploché soubory v `actions` jsou legacy stav a budou se přesouvat do
+  číslovaných podadresářů postupně při revizi dané akce.
+- Každý nový `features/NNN_name` adresář má nést vlastní dokumentaci nebo jasný
+  vstupní modul podle povahy feature.
+
+## ADR-014 — Sdílený základ a specializované profily agentů
+
+Datum: 2026-06-17
+Stav: `ACCEPTED`
+
+### Kontext
+
+Projekt má nejdříve dozrát do stabilního obecného asistenta s dobře odděleným
+jádrem, pamětí, actions a features. Později budou vznikat samostatné kopie
+zaměřené na konkrétní účel. Tyto kopie nemají znovu vymýšlet runtime základ; mají
+se lišit hlavně promptem, výběrem actions a zapnutými features.
+
+### Rozhodnutí
+
+Společný základ projektu obsahuje runtime jádro, paměť, konfiguraci, sdílené
+features, obecný prompt a pravidla pro actions. Specializace agenta se popisuje
+profilem v adresáři `profiles/NNN_name`. Profil určuje vlastní `prompt.txt`,
+výběr povolených tools z `actions/tool_catalog.py` a výběr zapnutých features.
+
+Samostatné kopie projektu se mají vytvářet až po stabilizaci společného základu.
+Kopie má převzít pouze potřebné actions, relevantní features a vlastní prompt
+podle zaměření agenta.
+
+### Důsledky
+
+- `features` jsou sdílená runtime vrstva, ne místo pro doménové zaměření agenta.
+- Doménové schopnosti, které model přímo volá, zůstávají v `actions`.
+- `profiles` popisují kombinaci promptu, povolených tools a zapnutých features.
+- Budoucí specializovaná kopie má být odvozená z profilu, ne ručně rozbitá
+  úpravami napříč nesouvisejícími soubory.
+- Aktuální aplikace zatím používá `core/prompt.txt`; profilový loader bude
+  samostatný navazující krok.

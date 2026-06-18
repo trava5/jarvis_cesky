@@ -14,15 +14,27 @@ LEGACY_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
 DEFAULT_CONFIG = {
     "gemini_api_key": "",
     "voice": "Charon",
+    "voice_provider": "auto",
     "youtube_api_key": "",
     "youtube_channel_handle": "",
+    "elevenlabs_api_key": "",
+    "eleven_labs_api_key": "",
+    "elevenlabs_voice_id": "",
+    "elevenlabs_model_id": "eleven_multilingual_v2",
+    "elevenlabs_output_format": "mp3_44100_128",
 }
 
 ENV_KEY_MAP = {
     "gemini_api_key": "GEMINI_API_KEY",
     "voice": "JARVIS_VOICE",
+    "voice_provider": "JARVIS_VOICE_PROVIDER",
     "youtube_api_key": "YOUTUBE_API_KEY",
     "youtube_channel_handle": "YOUTUBE_CHANNEL_HANDLE",
+    "elevenlabs_api_key": "ELEVENLABS_API_KEY",
+    "eleven_labs_api_key": "ELEVEN_LABS_API_KEY",
+    "elevenlabs_voice_id": "ELEVENLABS_VOICE_ID",
+    "elevenlabs_model_id": "ELEVENLABS_MODEL_ID",
+    "elevenlabs_output_format": "ELEVENLABS_OUTPUT_FORMAT",
 }
 
 

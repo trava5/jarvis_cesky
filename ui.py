@@ -1,7 +1,6 @@
 """
 JARVIS Windows — UI v3
 Soustředné tyrkysové kruhy · Segmentované oblouky
-Vytvořil Alp Ünlü — @alppunlu
 """
 
 import os, time, math, random, threading
@@ -10,10 +9,14 @@ import tkinter as tk
 from collections import deque
 from pathlib import Path
 import psutil
-from PIL import Image, ImageTk
 
 from app_config import has_gemini_api_key, load_app_config, save_app_config
-from actions.weather import get_weather_summary
+from actions.action_loader import load_action_function
+
+get_weather_summary = load_action_function(
+    "actions.001_weather.weather",
+    "get_weather_summary",
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -58,6 +61,12 @@ INPUT_H  = 34
 CONTROL_H = 146
 
 VOICES = ["Charon", "Puck", "Aoede", "Kore", "Fenrir", "Leda", "Orus", "Zephyr"]
+ELEVENLABS_VOICE_LABEL = "ElevenLabs (.env)"
+VOICE_PROVIDERS = {
+    "Gemini": "gemini",
+    "ElevenLabs": "elevenlabs",
+}
+VOICE_PROVIDER_LABELS = {value: label for label, value in VOICE_PROVIDERS.items()}
 
 # ── Systém písem ──────────────────────────────────────────────────────────────
 # Písmo Grift je nainstalované v systému uživatele. Pro výraznější nadpisy
@@ -544,7 +553,7 @@ class JarvisUI:
             "panel_x": 14,
             "panel_y": HDR_H + 10,
             "panel_w": 320,
-            "panel_h": 292,
+            "panel_h": 332,
         }
         self.setup_frame = None
         self.api_entry = None
@@ -556,10 +565,12 @@ class JarvisUI:
         self.on_pause_toggle = None
         self.on_stop_command = None
         self.on_voice_change = None
+        self.on_voice_provider_change = None
         self.on_effects_state_change = None
 
         # ── Voice ────────────────────────────────────────────────────────────
         self._current_voice = self._load_voice()
+        self._current_voice_provider = self._load_voice_provider()
 
         # ── Sound ────────────────────────────────────────────────────────────
         self.sound = SoundManager()
@@ -641,6 +652,7 @@ class JarvisUI:
         self._build_shutdown_button()
         self._build_settings_panel()
         self._build_voice_selector(self._settings_body)
+        self._build_voice_provider_selector(self._settings_body)
         self._build_sfx_button(self._settings_body)
         self._build_api_button(self._settings_body)
         self._build_fx_slider(self._settings_body)
@@ -665,7 +677,6 @@ class JarvisUI:
         self._sync_sound_state()
         self.root.after(180, self._play_startup_sfx_once)
         self._kick_brief_refresh()
-        self._build_social_bar()
         self.root.after(120, self._enter_fullscreen)
         self._animate()
         self.root.protocol("WM_DELETE_WINDOW", self._shutdown)
@@ -711,55 +722,21 @@ class JarvisUI:
         self.CHAT_H = self.CHAT_PANEL_H - 90
         self.CHAT_INPUT_Y = self.CHAT_PANEL_Y + self.CHAT_PANEL_H - INPUT_H - 10
 
-    # ── Social bar ───────────────────────────────────────────────────────────
-    def _build_social_bar(self):
-        ICON_SIZE = 28
-        ICON_DIR  = BASE_DIR / "Icon"
-
-        bar = tk.Frame(self.root, bg=C_BG)
-        self._social_bar = bar
-        bar.place(x=14, y=self.H - FOOTER_H - 52)
-
-        def _open(url):
-            import webbrowser
-            return lambda e: webbrowser.open(url)
-
-        def _load_icon(filename: str):
-            try:
-                img = Image.open(ICON_DIR / filename).convert("RGBA")
-                img = img.resize((ICON_SIZE, ICON_SIZE), Image.LANCZOS)
-                return ImageTk.PhotoImage(img)
-            except Exception:
-                return None
-
-        name_lbl = tk.Label(
-            bar, text="Alp\nÜnlü",
-            fg="#3a8a82", bg=C_BG,
-            font=font_display(14), cursor="hand2",
-            justify="left",
-        )
-        name_lbl.pack(side="left", padx=(0, 10))
-        name_lbl.bind("<Button-1>", _open("https://www.instagram.com/alppunlu"))
-
-        self._icon_ig = _load_icon("instagram-logo.png")
-        self._icon_yt = _load_icon("youtube-logo.png")
-
-        if self._icon_ig:
-            ig_lbl = tk.Label(bar, image=self._icon_ig, bg=C_BG, cursor="hand2")
-            ig_lbl.pack(side="left", padx=4)
-            ig_lbl.bind("<Button-1>", _open("https://www.instagram.com/alppunlu"))
-
-        if self._icon_yt:
-            yt_lbl = tk.Label(bar, image=self._icon_yt, bg=C_BG, cursor="hand2")
-            yt_lbl.pack(side="left", padx=4)
-            yt_lbl.bind("<Button-1>", _open("https://www.youtube.com/@alpunlu"))
-
     # ── Voice ─────────────────────────────────────────────────────────────────
     def _load_voice(self) -> str:
         try:
             return str(load_app_config().get("voice", "Charon") or "Charon")
         except Exception:
             return "Charon"
+
+    def _load_voice_provider(self) -> str:
+        try:
+            provider = str(load_app_config().get("voice_provider", "auto") or "auto").strip().lower()
+        except Exception:
+            provider = "auto"
+        if provider == "elevenlabs":
+            return "elevenlabs"
+        return "gemini"
 
     # ── Tlačítko ukončení ────────────────────────────────────────────────────
     def _build_shutdown_button(self):
@@ -935,6 +912,8 @@ class JarvisUI:
         self._volume_scale.place(x=0, y=136, width=inner_w, height=26)
         self._voice_label.place(x=0, y=178)
         self._voice_menu.place(x=88, y=172, width=inner_w - 88, height=30)
+        self._provider_label.place(x=0, y=218)
+        self._provider_menu.place(x=88, y=212, width=inner_w - 88, height=30)
 
     def _refresh_settings_status(self):
         if not hasattr(self, "_settings_status_primary"):
@@ -1102,11 +1081,11 @@ class JarvisUI:
     # ── Voice selector ───────────────────────────────────────────────────────
     def _build_voice_selector(self, parent=None):
         parent = parent or self.root
-        self._voice_var = tk.StringVar(value=self._current_voice)
+        self._voice_var = tk.StringVar(value=self._voice_display_value())
         self._voice_label = tk.Label(parent, text="HLAS", fg=C_MID, bg=parent.cget("bg"),
                                      font=font_body_bold(8))
 
-        self._voice_menu = tk.OptionMenu(parent, self._voice_var, *VOICES,
+        self._voice_menu = tk.OptionMenu(parent, self._voice_var, *self._voice_options_for_provider(),
                                          command=self._on_voice_select)
         self._voice_menu.config(
             fg=C_PRI, bg=C_PANEL, activeforeground=C_BG,
@@ -1117,11 +1096,86 @@ class JarvisUI:
             fg=C_PRI, bg=C_PANEL, font=font_body(10),
             activeforeground=C_BG, activebackground=C_PRI)
 
+    def _voice_options_for_provider(self):
+        if self._current_voice_provider == "elevenlabs":
+            return [ELEVENLABS_VOICE_LABEL]
+        return list(VOICES)
+
+    def _voice_display_value(self):
+        if self._current_voice_provider == "elevenlabs":
+            return ELEVENLABS_VOICE_LABEL
+        return self._current_voice if self._current_voice in VOICES else VOICES[0]
+
+    def _refresh_voice_menu_options(self):
+        if not hasattr(self, "_voice_menu"):
+            return
+        options = self._voice_options_for_provider()
+        menu = self._voice_menu["menu"]
+        menu.delete(0, "end")
+        for option in options:
+            menu.add_command(label=option, command=tk._setit(self._voice_var, option, self._on_voice_select))
+        current = self._voice_display_value()
+        self._voice_var.set(current)
+        self._voice_menu.config(width=max(12, min(18, max(len(option) for option in options))))
+
+    def _build_voice_provider_selector(self, parent=None):
+        parent = parent or self.root
+        label = VOICE_PROVIDER_LABELS.get(self._current_voice_provider, "Gemini")
+        self._provider_var = tk.StringVar(value=label)
+        self._provider_label = tk.Label(parent, text="PROVIDER", fg=C_MID, bg=parent.cget("bg"),
+                                        font=font_body_bold(8))
+
+        self._provider_menu = tk.OptionMenu(parent, self._provider_var, *VOICE_PROVIDERS.keys(),
+                                            command=self._on_voice_provider_select)
+        self._provider_menu.config(
+            fg=C_PRI, bg=C_PANEL, activeforeground=C_BG,
+            activebackground=C_PRI, font=font_body(10),
+            borderwidth=0, highlightthickness=1,
+            highlightbackground=C_MID, width=12)
+        self._provider_menu["menu"].config(
+            fg=C_PRI, bg=C_PANEL, font=font_body(10),
+            activeforeground=C_BG, activebackground=C_PRI)
+
     def _on_voice_select(self, voice: str):
+        if self._current_voice_provider == "elevenlabs":
+            self._voice_var.set(ELEVENLABS_VOICE_LABEL)
+            return
         self._current_voice = voice
+        if hasattr(self, "_voice_var") and self._voice_var.get() != voice:
+            self._voice_var.set(voice)
         save_app_config({"voice": voice})
         if self.on_voice_change:
             threading.Thread(target=self.on_voice_change, args=(voice,), daemon=True).start()
+
+    def _on_voice_provider_select(self, label: str):
+        provider = VOICE_PROVIDERS.get(str(label), "gemini")
+        self._current_voice_provider = provider
+        normalized_label = VOICE_PROVIDER_LABELS.get(provider, "Gemini")
+        if hasattr(self, "_provider_var") and self._provider_var.get() != normalized_label:
+            self._provider_var.set(normalized_label)
+        self._refresh_voice_menu_options()
+        save_app_config({"voice_provider": provider})
+        if self.on_voice_provider_change:
+            threading.Thread(
+                target=self.on_voice_provider_change,
+                args=(provider,),
+                daemon=True,
+            ).start()
+
+    def set_voice_provider(self, provider: str):
+        normalized = "elevenlabs" if str(provider).strip().lower() == "elevenlabs" else "gemini"
+
+        def apply_provider():
+            self._current_voice_provider = normalized
+            label = VOICE_PROVIDER_LABELS.get(normalized, "Gemini")
+            if hasattr(self, "_provider_var"):
+                self._provider_var.set(label)
+            self._refresh_voice_menu_options()
+
+        if threading.current_thread() is threading.main_thread():
+            apply_provider()
+        else:
+            self.root.after(0, apply_provider)
 
     # ── Mute button ──────────────────────────────────────────────────────────
     def _build_mute_button(self):
@@ -1217,8 +1271,6 @@ class JarvisUI:
         self.bg.configure(width=self.W, height=self.H)
         self.bg.place(x=0, y=0)
         self._place_layout_widgets()
-        if hasattr(self, "_social_bar"):
-            self._social_bar.place(x=14, y=self.H - FOOTER_H - 52)
         for p in self.particles:
             p["x"] %= self.W
             p["y"] %= self.H
