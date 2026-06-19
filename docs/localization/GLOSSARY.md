@@ -39,6 +39,7 @@
 | Tool description | Popis nástroje |
 | Feature | Běhová vlastnost |
 | Bridge | Bridge adaptér / propojovací adaptér |
+| Allowlist | Allowlist / seznam povolených chatů |
 | Voice provider | Poskytovatel hlasu |
 | Voice provider mode | Režim hlasového provideru |
 | ElevenLabs voice provider | Hlasový provider ElevenLabs |

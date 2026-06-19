@@ -43,6 +43,7 @@ from actions.youtube_stats import get_youtube_channel_report
 from wakeup_listener import WakeGestureListener
 
 elevenlabs_voice = import_module("features.001_elevenlabs_voice.provider")
+telegram_bridge_module = import_module("features.002_telegram_bridge.bridge")
 
 get_weather_summary = load_action_function(
     "actions.001_weather.weather",
@@ -459,6 +460,9 @@ class JarvisLive:
         self._speaking_lock = threading.Lock()
         self._session_id    = uuid.uuid4().hex
         self._voice_restart_requested = False
+        self._external_text_lock = asyncio.Lock()
+        self._pending_text_replies: list[asyncio.Future] = []
+        self._telegram_bridge = None
 
         self.ui.on_text_command  = self._on_text_command
         self.ui.on_pause_toggle  = self._on_pause_toggle
@@ -547,6 +551,74 @@ class JarvisLive:
             ),
             self._loop
         )
+
+    def start_telegram_bridge(self):
+        try:
+            config = telegram_bridge_module.load_config()
+            if not telegram_bridge_module.is_configured(config):
+                self.ui.write_debug("Telegram bridge není nakonfigurovaný.", level="INFO")
+                return
+            self._telegram_bridge = telegram_bridge_module.TelegramBotBridge(
+                config=config,
+                on_text=self._handle_telegram_text,
+                on_voice=self._handle_telegram_voice,
+                logger=lambda message: self.ui.write_debug(message, level="INFO"),
+            )
+            self._telegram_bridge.start()
+            self.ui.write_log("SYS: Telegram bridge je spuštěný.")
+        except Exception as exc:
+            self.ui.write_log(f"ERR: Telegram bridge se nepodařilo spustit: {exc}")
+
+    def _handle_telegram_text(self, text: str, chat_id: int) -> str:
+        if self._paused:
+            return "JARVIS je pozastavený."
+        if not self._loop or not self.session:
+            return "JARVIS ještě není připojený. Zkuste to za chvíli."
+        future = asyncio.run_coroutine_threadsafe(
+            self._ask_text_external(text, source="telegram", chat_id=chat_id),
+            self._loop,
+        )
+        try:
+            return future.result(timeout=90)
+        except Exception as exc:
+            self.ui.write_debug(f"Telegram text: {exc}", level="WARN")
+            return "Odpověď se nepodařilo získat včas."
+
+    def _handle_telegram_voice(self, path: Path, chat_id: int, voice: dict) -> str:
+        self.ui.write_log(f"SYS: Přijata hlasová zpráva z Telegramu: {path.name}")
+        return (
+            "Hlasová zpráva dorazila. Přepis hlasu z Telegramu zatím není zapojený; "
+            "pošli prosím textovou zprávu."
+        )
+
+    async def _ask_text_external(self, text: str, source: str, chat_id: int | None = None) -> str:
+        async with self._external_text_lock:
+            if not self.session:
+                return "JARVIS ještě není připojený."
+            loop = asyncio.get_running_loop()
+            reply_future: asyncio.Future = loop.create_future()
+            self._pending_text_replies.append(reply_future)
+            self.ui.write_log(f"Vy ({source}): {text}")
+            metadata = {"source": source}
+            if chat_id is not None:
+                metadata["chat_id"] = chat_id
+            self._remember_turn("user", text, metadata)
+            await self.session.send_client_content(
+                turns={"parts": [{"text": text}]},
+                turn_complete=True,
+            )
+            try:
+                return await asyncio.wait_for(reply_future, timeout=85)
+            finally:
+                if reply_future in self._pending_text_replies:
+                    self._pending_text_replies.remove(reply_future)
+
+    def _notify_text_reply(self, text: str) -> None:
+        if not text or not self._pending_text_replies:
+            return
+        future = self._pending_text_replies.pop(0)
+        if not future.done():
+            future.set_result(text)
 
     async def _interrupt_audio(self):
         try:
@@ -981,6 +1053,7 @@ class JarvisLive:
                             if full_out:
                                 self.ui.write_log(f"JARVIS: {full_out}")
                                 self._remember_turn("assistant", full_out, {"source": "voice"})
+                                self._notify_text_reply(full_out)
                                 if self._uses_elevenlabs_voice() and self.tts_text_queue:
                                     self.tts_text_queue.put_nowait(full_out)
                                 if output_noise_samples:
@@ -1182,6 +1255,7 @@ def main():
     def runner():
         ui.wait_for_api_key()
         jarvis = JarvisLive(ui)
+        jarvis.start_telegram_bridge()
         try:
             asyncio.run(jarvis.run())
         except KeyboardInterrupt:

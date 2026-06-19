@@ -956,3 +956,35 @@ Známá omezení:
 - Pokud se skutečný Google kalendář přejmenuje tak, že už nepůjde spárovat podle
   aliasů nebo emailových částí, bude potřeba aktualizovat mapování v
   `actions/002_calendar/calendar.py`.
+
+## 2026-06-18 — FEAT-006 — Telegram bridge pro textovou komunikaci
+
+Stav: `DONE`
+
+Provedeno:
+
+- Založena feature `features/002_telegram_bridge`.
+- Přidán Telegram Bot API bridge přes long polling bez nové externí knihovny.
+- Konfigurace probíhá přes `.env`: `TELEGRAM_BRIDGE_ENABLED`,
+  `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_IDS` a `TELEGRAM_DOWNLOAD_DIR`.
+- Přístup je omezený přes allowlist chat ID; nepovolené chaty nedostanou přístup k
+  agentovi.
+- `main.py` umí předat textovou Telegram zprávu do běžící Gemini Live session a
+  vrátit další dokončenou odpověď zpět do Telegramu.
+- Hlasové Telegram zprávy se přijmou a uloží do `runtime/telegram`, ale přepis
+  hlasu zatím vrací informaci, že STT není zapojené.
+- `.env.example`, `features/README.md`, feature README a slovník byly
+  aktualizovány.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile main.py features\002_telegram_bridge\bridge.py features\002_telegram_bridge\__init__.py`
+- Lokální smoke test `parse_allowed_chat_ids`.
+- Lokální smoke test dělení dlouhých Telegram odpovědí.
+
+Známá omezení:
+
+- Reálný Telegram API test nebyl spuštěn, protože zatím není doplněný bot token a
+  allowlist chat ID.
+- Hlasové zprávy zatím nejsou přepisované do textu. Další krok musí doplnit STT
+  nebo konverzi Telegram OGG/Opus audia do podporovaného formátu.

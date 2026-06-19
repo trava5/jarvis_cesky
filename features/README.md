@@ -33,6 +33,7 @@ Tyto nástroje patří do `actions` a musí mít záznam v `actions/tool_catalog
 | Feature | Stav | Popis |
 |---|---|---|
 | `001_elevenlabs_voice` | napojeno na živý výstup | Hlasový provider ElevenLabs pro syntézu textu do souboru i živý desktopový hlas při vyplněné konfiguraci. |
+| `002_telegram_bridge` | základní textový bridge | Telegram Bot API bridge pro textovou komunikaci s běžící desktopovou relací JARVIS; hlasové zprávy se zatím přijímají bez přepisu. |
 
 ## Vztah k profilům
 

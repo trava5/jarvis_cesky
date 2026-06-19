@@ -38,6 +38,7 @@ Aktualizováno: 2026-06-17
 | FEAT-003 | Stabilizace výchozího hlasového provideru | DONE |
 | FEAT-004 | Oprava ElevenLabs režimu pro native audio model | DONE |
 | FEAT-005 | Fallback při nedostupném ElevenLabs účtu | DONE |
+| FEAT-006 | Telegram bridge pro textovou komunikaci | DONE |
 | SEC-001 | Přesun citlivé konfigurace do `.env` | DONE |
 
 ## L10N-001 — Jádro a prompt
@@ -391,6 +392,20 @@ Stav: `DONE`
 - [x] Přepnout hlasový provider zpět na Gemini Live a obnovit relaci.
 - [x] Aktualizovat dokumentaci ElevenLabs feature.
 - [x] Ověřit syntaxi a bezpečný smoke test bez reálného API volání.
+- [x] Zapsat výsledek do historie.
+
+## FEAT-006 — Telegram bridge pro textovou komunikaci
+
+Stav: `DONE`
+
+- [x] Založit `features/002_telegram_bridge`.
+- [x] Přidat konfiguraci přes `.env` a `.env.example`.
+- [x] Implementovat Telegram long polling přes Bot API.
+- [x] Omezit přístup přes allowlist chat ID.
+- [x] Napojit textové Telegram zprávy na běžící Gemini Live session.
+- [x] Přijímat hlasové zprávy a připravit místo pro navazující STT krok.
+- [x] Aktualizovat dokumentaci feature.
+- [x] Ověřit syntaxi a bezpečné smoke testy bez reálného Telegram API volání.
 - [x] Zapsat výsledek do historie.
 
 ## SEC-001 — Citlivá konfigurace v `.env`
