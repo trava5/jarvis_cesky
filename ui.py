@@ -53,6 +53,8 @@ ORB_COLORS = {
 # ── Rozměry ──────────────────────────────────────────────────────────────────
 W_TARGET = 2200
 H_TARGET = 1320
+WINDOW_MIN_W = 960
+WINDOW_MIN_H = 640
 LEFT_W_T = 360
 RIGHT_W_T = 410
 HDR_H    = 72
@@ -62,10 +64,12 @@ CONTROL_H = 146
 
 VOICES = ["Charon", "Puck", "Aoede", "Kore", "Fenrir", "Leda", "Orus", "Zephyr"]
 ELEVENLABS_VOICE_LABEL = "ElevenLabs (.env)"
+ELEVENLABS_RUNTIME_ENABLED = True
 VOICE_PROVIDERS = {
     "Gemini": "gemini",
-    "ElevenLabs": "elevenlabs",
 }
+if ELEVENLABS_RUNTIME_ENABLED:
+    VOICE_PROVIDERS["ElevenLabs"] = "elevenlabs"
 VOICE_PROVIDER_LABELS = {value: label for label, value in VOICE_PROVIDERS.items()}
 
 # ── Systém písem ──────────────────────────────────────────────────────────────
@@ -490,7 +494,9 @@ class JarvisUI:
         self.H = min(max(520, sh - margin_y), sh, H_TARGET)
         _geo = f"{self.W}x{self.H}+{(sw-self.W)//2}+{max(0, (sh-self.H)//2 - 8)}"
         self.root.geometry(_geo)
-        self.root.minsize(min(self.W, sw), min(self.H, sh))
+        self.root.attributes("-fullscreen", False)
+        self._min_window_size = (min(WINDOW_MIN_W, sw), min(WINDOW_MIN_H, sh))
+        self.root.minsize(*self._min_window_size)
         self.root.resizable(True, True)
         self.root.configure(bg=C_BG)
         self.root.attributes('-topmost', True)
@@ -504,7 +510,7 @@ class JarvisUI:
 
         self._window_geometry = _geo
         self._normal_size = (self.W, self.H)
-        self._fullscreen = True
+        self._fullscreen = False
 
         self._set_layout_metrics(self.W, self.H)
 
@@ -668,6 +674,7 @@ class JarvisUI:
         self.root.bind("<F5>",        lambda e: self._toggle_pause())
         self.root.bind("<F11>",       lambda e: self._toggle_fullscreen())
         self.root.bind("<Control-f>", lambda e: self._toggle_fullscreen())
+        self.root.bind("<Configure>", self._on_root_configure)
 
         self._api_key_ready = has_gemini_api_key()
         if not self._api_key_ready:
@@ -677,7 +684,7 @@ class JarvisUI:
         self._sync_sound_state()
         self.root.after(180, self._play_startup_sfx_once)
         self._kick_brief_refresh()
-        self.root.after(120, self._enter_fullscreen)
+        self.root.after(120, self._force_startup_size)
         self._animate()
         self.root.protocol("WM_DELETE_WINDOW", self._shutdown)
 
@@ -695,6 +702,18 @@ class JarvisUI:
         self.root.attributes("-fullscreen", True)
         self.root.geometry(f"{sw}x{sh}+0+0")
         self._resize_surface(sw, sh)
+
+    def _on_root_configure(self, event):
+        if event.widget is not self.root or self._fullscreen:
+            return
+        min_w, min_h = self._min_window_size
+        width = max(int(event.width), min_w)
+        height = max(int(event.height), min_h)
+        if (width, height) == (self.W, self.H):
+            return
+        self._normal_size = (width, height)
+        self._window_geometry = f"{width}x{height}+{self.root.winfo_x()}+{self.root.winfo_y()}"
+        self._resize_surface(width, height)
 
     def _set_layout_metrics(self, width: int, height: int):
         self.W = int(width)
@@ -734,7 +753,7 @@ class JarvisUI:
             provider = str(load_app_config().get("voice_provider", "auto") or "auto").strip().lower()
         except Exception:
             provider = "auto"
-        if provider == "elevenlabs":
+        if provider == "elevenlabs" and ELEVENLABS_RUNTIME_ENABLED:
             return "elevenlabs"
         return "gemini"
 
@@ -1097,12 +1116,12 @@ class JarvisUI:
             activeforeground=C_BG, activebackground=C_PRI)
 
     def _voice_options_for_provider(self):
-        if self._current_voice_provider == "elevenlabs":
+        if self._current_voice_provider == "elevenlabs" and ELEVENLABS_RUNTIME_ENABLED:
             return [ELEVENLABS_VOICE_LABEL]
         return list(VOICES)
 
     def _voice_display_value(self):
-        if self._current_voice_provider == "elevenlabs":
+        if self._current_voice_provider == "elevenlabs" and ELEVENLABS_RUNTIME_ENABLED:
             return ELEVENLABS_VOICE_LABEL
         return self._current_voice if self._current_voice in VOICES else VOICES[0]
 
@@ -1137,7 +1156,7 @@ class JarvisUI:
             activeforeground=C_BG, activebackground=C_PRI)
 
     def _on_voice_select(self, voice: str):
-        if self._current_voice_provider == "elevenlabs":
+        if self._current_voice_provider == "elevenlabs" and ELEVENLABS_RUNTIME_ENABLED:
             self._voice_var.set(ELEVENLABS_VOICE_LABEL)
             return
         self._current_voice = voice
@@ -1163,7 +1182,8 @@ class JarvisUI:
             ).start()
 
     def set_voice_provider(self, provider: str):
-        normalized = "elevenlabs" if str(provider).strip().lower() == "elevenlabs" else "gemini"
+        requested = str(provider).strip().lower()
+        normalized = "elevenlabs" if requested == "elevenlabs" and ELEVENLABS_RUNTIME_ENABLED else "gemini"
 
         def apply_provider():
             self._current_voice_provider = normalized

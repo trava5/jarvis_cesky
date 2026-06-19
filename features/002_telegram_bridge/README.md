@@ -17,23 +17,34 @@ TELEGRAM_BRIDGE_ENABLED="false"
 TELEGRAM_BOT_TOKEN=""
 TELEGRAM_ALLOWED_CHAT_IDS=""
 TELEGRAM_DOWNLOAD_DIR="runtime/telegram"
+TELEGRAM_TRANSCRIPTION_MODEL="models/gemini-2.5-flash"
 ```
 
 `TELEGRAM_ALLOWED_CHAT_IDS` je čárkou oddělený allowlist chatů, které smějí s
 agentem komunikovat. Bez allowlistu se bridge nespustí.
+`TELEGRAM_TRANSCRIPTION_MODEL` určuje model pro přepis hlasových zpráv do textu.
 
 ## Stav
 
-První verze podporuje:
+Aktuální verze podporuje:
 
 - Telegram long polling přes Bot API,
 - autorizaci přes `TELEGRAM_ALLOWED_CHAT_IDS`,
 - textové zprávy směrované do běžící Gemini Live session,
-- přijetí hlasové zprávy a stažení souboru do `runtime/telegram`.
+- servisní příkazy `/start`, `/help` a `/id`,
+- přijetí hlasové zprávy, stažení souboru do `runtime/telegram`,
+- přepis Telegram OGG/Opus audia přes Gemini a předání textu do stejného
+  agentního runtime jako běžnou textovou zprávu,
+- odpověď podle typu vstupu: textový dotaz vrací text, hlasový dotaz se přepíše
+  do textu a odpověď agenta se odešle jako audio podle aktivního hlasového
+  provideru desktopové aplikace,
+- Telegram odpověď z externího dotazu se nepřehrává lokálně na desktopové stanici.
 
-Hlasové zprávy zatím nejsou přepisované do textu. Navazující krok musí doplnit STT
-nebo audio převod z Telegram OGG/Opus do formátu, který umí zpracovat zvolený
-model.
+Při aktivním Gemini Live provideru se audio chunky odpovědi uloží do WAV souboru a
+odešlou do Telegramu stejným Gemini hlasem, který používá desktop. Při aktivním
+ElevenLabs provideru bridge používá ElevenLabs MP3 a případně ElevenLabs PCM/WAV
+fallback. Lokální Windows TTS fallback je odpojený, protože neodpovídal zvolenému
+hlasu asistenta.
 
 Další architektonický krok má oddělit explicitní agentní runtime rozhraní, které
 budou sdílet Desktop UI, Telegram a případní další klienti.
@@ -49,3 +60,7 @@ budou sdílet Desktop UI, Telegram a případní další klienti.
 
 Bridge se spustí jen při vyplněném tokenu, zapnutém `TELEGRAM_BRIDGE_ENABLED` a
 nenulovém allowlistu.
+
+Pro zjištění `chat_id` pošli botovi zprávu `/id`. Pokud chat ještě není v
+allowlistu, bridge z bezpečnostních důvodů odpoví jen informací, že chat nemá
+povolený přístup.

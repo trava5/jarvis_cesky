@@ -15,8 +15,15 @@ import requests
 BASE_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_DOWNLOAD_DIR = BASE_DIR / "runtime" / "telegram"
 
+@dataclass(frozen=True)
+class TelegramBridgeReply:
+    text: str = ""
+    audio_path: Path | None = None
+    audio_title: str = "JARVIS odpověď"
+
+
 TextHandler = Callable[[str, int], str]
-VoiceHandler = Callable[[Path, int, dict], str]
+VoiceHandler = Callable[[Path, int, dict], str | TelegramBridgeReply]
 LogHandler = Callable[[str], None]
 
 
@@ -133,6 +140,20 @@ class TelegramBotBridge:
             raise TelegramBridgeError(str(payload.get("description", "Telegram API chyba.")))
         return payload.get("result")
 
+    def _request_with_file(self, method: str, file_field: str, file_path: Path, **params):
+        with Path(file_path).open("rb") as handle:
+            response = requests.post(
+                f"{self._api_base}/{method}",
+                data=params,
+                files={file_field: (Path(file_path).name, handle)},
+                timeout=self.config.request_timeout,
+            )
+        response.raise_for_status()
+        payload = response.json()
+        if not payload.get("ok"):
+            raise TelegramBridgeError(str(payload.get("description", "Telegram API chyba.")))
+        return payload.get("result")
+
     def _get_updates(self) -> list[dict]:
         result = self._request(
             "getUpdates",
@@ -146,6 +167,15 @@ class TelegramBotBridge:
         chunks = _split_telegram_text(text)
         for chunk in chunks:
             self._request("sendMessage", chat_id=chat_id, text=chunk)
+
+    def _send_audio(self, chat_id: int, audio_path: Path, title: str = "JARVIS odpověď") -> None:
+        self._request_with_file(
+            "sendAudio",
+            "audio",
+            Path(audio_path),
+            chat_id=chat_id,
+            title=title,
+        )
 
     def _send_chat_action(self, chat_id: int, action: str = "typing") -> None:
         try:
@@ -173,11 +203,23 @@ class TelegramBotBridge:
         chat_id = int(chat.get("id", 0) or 0)
         if chat_id not in self.config.allowed_chat_ids:
             if chat_id:
-                self._send_message(chat_id, "Tento chat nemá povolený přístup k JARVIS.")
+                text = str(message.get("text", "") or "").strip()
+                command = text.split(maxsplit=1)[0].lower() if text else ""
+                if command in {"/start", "/help", "/id", "/chatid", "/chat_id"}:
+                    self._send_message(
+                        chat_id,
+                        f"ID tohoto chatu je {chat_id}. Tento chat zatím nemá povolený přístup k JARVIS.",
+                    )
+                else:
+                    self._send_message(chat_id, "Tento chat nemá povolený přístup k JARVIS.")
             return
 
         if message.get("text"):
             text = str(message["text"]).strip()
+            command_reply = self._handle_command(text, chat_id)
+            if command_reply:
+                self._send_message(chat_id, command_reply)
+                return
             self._send_chat_action(chat_id)
             reply = self.on_text(text, chat_id)
             self._send_message(chat_id, reply or "Bez odpovědi.")
@@ -187,7 +229,20 @@ class TelegramBotBridge:
             self._handle_voice(chat_id, message)
             return
 
-        self._send_message(chat_id, "Umím zpracovat textové zprávy. Hlasové zprávy budou navazující krok.")
+        self._send_message(chat_id, "Umím zpracovat textové a hlasové zprávy.")
+
+    @staticmethod
+    def _handle_command(text: str, chat_id: int) -> str | None:
+        command = str(text or "").strip().split(maxsplit=1)[0].lower()
+        if command in {"/start", "/help"}:
+            return (
+                "JARVIS Telegram bridge je aktivní.\n"
+                "Pošli textovou zprávu nebo hlasovou zprávu.\n"
+                f"ID tohoto chatu je {chat_id}."
+            )
+        if command in {"/id", "/chatid", "/chat_id"}:
+            return f"ID tohoto chatu je {chat_id}."
+        return None
 
     def _handle_voice(self, chat_id: int, message: dict) -> None:
         if not self.on_voice:
@@ -203,12 +258,21 @@ class TelegramBotBridge:
             self._send_message(chat_id, "Telegram neposlal identifikátor hlasové zprávy.")
             return
 
-        self._send_chat_action(chat_id, "typing")
+        self._send_chat_action(chat_id, "record_voice")
         file_path = self._get_file_path(file_id)
         suffix = Path(file_path).suffix or ".oga"
         target = self.config.download_dir / f"{file_id}{suffix}"
         self._download_file(file_path, target)
+        self._send_chat_action(chat_id, "typing")
         reply = self.on_voice(target, chat_id, voice)
+        if isinstance(reply, TelegramBridgeReply):
+            if reply.audio_path:
+                self._send_audio(chat_id, reply.audio_path, reply.audio_title)
+            elif reply.text:
+                self._send_message(chat_id, reply.text)
+            else:
+                self._send_message(chat_id, "Hlasová zpráva byla přijata.")
+            return
         self._send_message(chat_id, reply or "Hlasová zpráva byla přijata.")
 
 
@@ -217,4 +281,3 @@ def _split_telegram_text(text: str, limit: int = 3900) -> list[str]:
     if not clean:
         return [""]
     return [clean[index:index + limit] for index in range(0, len(clean), limit)]
-

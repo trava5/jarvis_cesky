@@ -69,6 +69,28 @@ URI_SCHEMES = {
 }
 
 
+WINDOWED_CREATION_FLAGS = (
+    getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+    | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+)
+
+
+def _open_in_window(command: list[str]) -> None:
+    subprocess.Popen(
+        command,
+        shell=False,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=True,
+        creationflags=WINDOWED_CREATION_FLAGS,
+    )
+
+
+def _start_in_window(target: str) -> None:
+    _open_in_window(["cmd", "/c", "start", "", target])
+
+
 def open_app(app_name: str) -> str:
     if not app_name:
         return "Nebyl zadán název aplikace."
@@ -88,28 +110,21 @@ def open_app(app_name: str) -> str:
     exe_path = shutil.which(resolved)
     if exe_path:
         try:
-            subprocess.Popen([exe_path], shell=False)
+            _open_in_window([exe_path])
             return f"Aplikace {app_name} byla otevřena."
         except Exception as e:
             return f"Aplikaci '{app_name}' se nepodařilo otevřít: {e}"
 
-    # Příkaz start přes shell Windows.
+    # Příkaz start přes shell Windows, bez čekání na spuštěnou aplikaci.
     try:
-        result = subprocess.run(
-            f'start "" "{resolved}"',
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0:
-            return f"Aplikace {app_name} byla otevřena."
-    except Exception:
-        pass
+        _start_in_window(str(resolved))
+        return f"Aplikace {app_name} byla otevřena."
+    except Exception as e:
+        start_error = e
 
     # Poslední možnost: os.startfile.
     try:
         os.startfile(resolved)
         return f"Aplikace {app_name} byla otevřena."
     except Exception as e:
-        return f"Aplikaci '{app_name}' se nepodařilo najít nebo otevřít: {e}"
+        return f"Aplikaci '{app_name}' se nepodařilo najít nebo otevřít: {e or start_error}"

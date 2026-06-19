@@ -120,13 +120,17 @@ def _raise_for_tts_status(response: requests.Response) -> None:
         response.raise_for_status()
     except requests.HTTPError as exc:
         status_code = getattr(response, "status_code", None)
+        detail = str(getattr(response, "text", "") or "").strip()
+        detail_suffix = f" Detail: {detail[:300]}" if detail else ""
         if status_code == 402:
             raise ElevenLabsPaymentRequiredError(
                 "ElevenLabs účet nemá dostupný kredit nebo vyžaduje platbu."
             ) from exc
         if status_code:
-            raise ElevenLabsVoiceError(f"ElevenLabs TTS selhalo: HTTP {status_code}.") from exc
-        raise ElevenLabsVoiceError("ElevenLabs TTS selhalo.") from exc
+            raise ElevenLabsVoiceError(
+                f"ElevenLabs TTS selhalo: HTTP {status_code}.{detail_suffix}"
+            ) from exc
+        raise ElevenLabsVoiceError(f"ElevenLabs TTS selhalo.{detail_suffix}") from exc
 
 
 def synthesize_to_file(

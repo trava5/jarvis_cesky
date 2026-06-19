@@ -1046,3 +1046,317 @@ Známá omezení:
   interpreter `C:\Users\travn\AppData\Local\Programs\Python\Python311\python.exe`.
 - `ACT-002` zůstává rozpracovaný, protože další ploché akční moduly ještě čekají
   na postupnou revizi a přesun.
+
+## 2026-06-19 — ACT-002 — Ne blokující spouštění `open_app` v okně
+
+Stav: `IN PROGRESS`
+
+Provedeno:
+
+- `actions/003_open_app/open_app.py` už nepoužívá čekající `subprocess.run` pro
+  Windows `start`.
+- Spustitelné soubory z `PATH` se otevírají přes neblokující `subprocess.Popen`
+  s Windows příznaky pro nové okno a procesovou skupinu.
+- Fallback přes Windows `start` se spouští neblokujícím způsobem v samostatném
+  okně.
+- Dokumentace `actions/003_open_app/README.md`, `actions/tool_catalog.py` a
+  `docs/actions/REVIEW.md` byla zpřesněna podle nového chování.
+- Plán `ACT-002` byl doplněn o hotový kontrolní bod pro oddělené spouštění
+  aplikací v samostatném okně.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile actions\003_open_app\open_app.py actions\003_open_app\__init__.py actions\tool_catalog.py`
+- Bezpečný smoke test importu přes loader, validace prázdného názvu a sestavení
+  neblokujícího Windows `start` příkazu bez reálného otevření aplikace.
+- Prošel jsem `docs/localization/CHECKLIST.md`.
+
+Známá omezení:
+
+- Reálné otevření aplikace nebylo spuštěno automaticky, aby se bez dalšího
+  pokynu neměnil stav uživatelského prostředí.
+- `ACT-002` zůstává rozpracovaný, protože další ploché akční moduly ještě čekají
+  na postupnou revizi a přesun.
+
+## 2026-06-19 — UI-005 — Spouštění dashboardu v samostatném okně
+
+Stav: `DONE`
+
+Provedeno:
+
+- Výchozí start `JarvisUI` byl změněn z fullscreen režimu na běžné samostatné
+  okno s vypočtenou centrovanou geometrií.
+- `ui.py` nyní při startu explicitně nastavuje `-fullscreen` na `False`.
+- Původní automatické volání `_enter_fullscreen` po startu bylo nahrazeno
+  vynucením běžné startovní velikosti okna.
+- Ruční přepnutí fullscreen režimu přes `F11` a `Ctrl+F` zůstalo zachované.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile ui.py`
+- Prošel jsem `docs/localization/CHECKLIST.md`.
+
+Známá omezení:
+
+- Reálný GUI smoke test nebyl spuštěn automaticky, aby se bez výslovného pokynu
+  neotevíralo okno aplikace na ploše.
+
+## 2026-06-19 — UI-005 — Povolení zmenšení dashboardového okna
+
+Stav: `DONE`
+
+Provedeno:
+
+- `ui.py` už nenastavuje minimální velikost okna na startovní rozměry dashboardu.
+- Přidány menší minimální rozměry `WINDOW_MIN_W` a `WINDOW_MIN_H`, aby šlo okno
+  ručně zmenšit a zároveň zůstalo použitelné.
+- Přidán handler `<Configure>`, který při ruční změně velikosti přepočítá layout
+  přes `_resize_surface`.
+- Poslední běžná velikost okna se ukládá do `_normal_size` a `_window_geometry`,
+  takže návrat z fullscreen režimu respektuje aktuální velikost okna.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile ui.py`
+- Prošel jsem `docs/localization/CHECKLIST.md`.
+
+Známá omezení:
+
+- Reálný GUI resize test nebyl spuštěn automaticky, aby se bez výslovného pokynu
+  neotevíralo okno aplikace na ploše.
+
+## 2026-06-19 — FEAT-007 — Telegram hlasové zprávy a servisní příkazy
+
+Stav: `DONE`
+
+Provedeno:
+
+- Telegram bridge nyní podporuje servisní příkazy `/start`, `/help`, `/id`,
+  `/chatid` a `/chat_id`.
+- Nepovolený chat může přes tyto servisní příkazy zjistit vlastní `chat_id`, ale
+  nedostane přístup k agentovi, dokud není v `TELEGRAM_ALLOWED_CHAT_IDS`.
+- Hlasové zprávy z Telegramu se stáhnou do `runtime/telegram` a v `main.py` se
+  přepisují přes Gemini `generate_content`.
+- Přepsaný text se předává do stejné cesty `_handle_telegram_text`, kterou
+  používají běžné textové Telegram zprávy. Agent tak sdílí stejný runtime,
+  actions, paměť i odpovědi.
+- Do `.env.example` byla přidána proměnná `TELEGRAM_TRANSCRIPTION_MODEL`.
+- Aktualizována dokumentace `features/002_telegram_bridge/README.md` a přehled
+  `features/README.md`.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile main.py features\002_telegram_bridge\bridge.py features\002_telegram_bridge\__init__.py`
+- Smoke test servisních příkazů Telegram bridge.
+- Smoke test dělení dlouhých Telegram odpovědí.
+- Smoke test MIME typu pro Telegram audio soubory `.oga`, `.opus` a `.m4a`.
+- Izolovaný test přepisu hlasové zprávy s monkeypatchovaným `genai.Client`, bez
+  reálného síťového volání.
+- Prošel jsem `docs/localization/CHECKLIST.md`.
+
+Známá omezení:
+
+- Reálný Telegram Bot API test nebyl spuštěn automaticky, protože vyžaduje
+  skutečný bot token a síťové volání.
+- Reálný Gemini přepis hlasové zprávy nebyl spuštěn automaticky, aby se bez
+  potvrzení neposílal testovací audio obsah do externí služby.
+
+## 2026-06-19 — FEAT-008 — Telegram hlasové odpovědi podle typu vstupu
+
+Stav: `DONE`
+
+Provedeno:
+
+- Telegram bridge nyní rozlišuje typ vstupu: textový dotaz vrací textovou
+  odpověď a hlasový dotaz vrací audio odpověď.
+- `features/002_telegram_bridge/bridge.py` byl rozšířen o `TelegramBridgeReply`
+  a odesílání audio souboru přes Telegram Bot API `sendAudio`.
+- `main.py` po přepisu hlasové zprávy získá odpověď agenta stejnou cestou jako u
+  textové Telegram zprávy a následně ji převede přes ElevenLabs do MP3 souboru.
+- Pokud ElevenLabs není nakonfigurovaný nebo TTS selže, Telegram dostane textový
+  fallback s odpovědí agenta.
+- Dokumentace `features/002_telegram_bridge/README.md` a `features/README.md`
+  byla aktualizována podle nového chování.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile main.py features\002_telegram_bridge\bridge.py features\002_telegram_bridge\__init__.py`
+- Smoke test odesílání audio odpovědi přes interní Telegram bridge bez reálného
+  Telegram API volání.
+- Smoke test syntézy Telegram odpovědi s monkeypatchovaným ElevenLabs providerem
+  bez reálného ElevenLabs API volání.
+- Izolovaný test celé hlasové větve s falešným přepisem, falešnou odpovědí agenta
+  a falešným audio souborem.
+- Prošel jsem `docs/localization/CHECKLIST.md`.
+
+Známá omezení:
+
+- Reálné odeslání audio odpovědi přes Telegram nebylo spuštěno automaticky,
+  protože vyžaduje síťové volání a skutečný bot token.
+- Hlasové odpovědi pro Telegram nyní vyžadují funkční ElevenLabs konfiguraci;
+  bez ní se vrací textový fallback.
+
+## 2026-06-19 — FEAT-009 — Dočasné vypnutí ElevenLabs runtime feature
+
+Stav: `DONE`
+
+Provedeno:
+
+- ElevenLabs runtime byl dočasně vypnutý konstantou `ELEVENLABS_RUNTIME_ENABLED = False`.
+- `main.py` nyní vynucuje Gemini Live jako aktivní hlasový provider i v případě,
+  že je v `.env` uložené `JARVIS_VOICE_PROVIDER="elevenlabs"`.
+- Dashboard už nenabízí ElevenLabs jako volbu provideru a hodnotu `elevenlabs`
+  z konfigurace bere jako Gemini.
+- `app_config.py` a `.env.example` používají jako výchozí provider `gemini`.
+- Telegram hlasové dotazy se dál přepisují přes Gemini, ale odpověď se dočasně
+  vrací textem, protože ElevenLabs TTS není dostupný.
+- Dokumentace `features/001_elevenlabs_voice/README.md`,
+  `features/002_telegram_bridge/README.md` a `features/README.md` byla
+  aktualizována podle dočasného vypnutí.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile main.py ui.py app_config.py features\002_telegram_bridge\bridge.py features\001_elevenlabs_voice\provider.py`
+- Smoke test potvrdil, že aktivní hlasový provider je Gemini a ElevenLabs se
+  nepoužívá.
+- Smoke test potvrdil, že dashboard nabízí pouze provider `Gemini`.
+- Smoke test potvrdil, že Telegram hlasová větev vrátí textový fallback bez TTS.
+- Prošel jsem `docs/localization/CHECKLIST.md`.
+
+Známá omezení:
+
+- Telegram hlasové vstupy dočasně nevrací audio odpověď. Po opětovném zapnutí
+  funkčního TTS provideru bude možné audio odpovědi vrátit.
+- Implementace ElevenLabs zůstává v repozitáři, ale runtime ji nepoužívá.
+
+## 2026-06-19 — FEAT-010 — Opětovné zapnutí ElevenLabs runtime feature
+
+Stav: `DONE`
+
+Provedeno:
+
+- ElevenLabs runtime byl znovu povolený v `main.py` a `ui.py`.
+- Dashboard v panelu nastavení znovu nabízí providery Gemini a ElevenLabs.
+- Backend při výslovné volbě `JARVIS_VOICE_PROVIDER="elevenlabs"` znovu používá
+  ElevenLabs jako aktivní hlasový provider.
+- Telegram hlasové dotazy znovu vrací audio odpověď přes ElevenLabs, pokud je TTS
+  nakonfigurované; při selhání zůstává textový fallback.
+- `.env.example` a dokumentace `features/001_elevenlabs_voice/README.md`,
+  `features/002_telegram_bridge/README.md` a `features/README.md` byly
+  aktualizované podle obnoveného chování.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile main.py ui.py app_config.py features\001_elevenlabs_voice\provider.py features\002_telegram_bridge\bridge.py`
+- Smoke test potvrdil, že dashboard znovu nabízí provider `ElevenLabs`.
+- Smoke test potvrdil, že backend při nastavení `JARVIS_VOICE_PROVIDER="elevenlabs"`
+  vrací aktivní provider `elevenlabs`.
+- Smoke test potvrdil vytvoření Telegram audio odpovědi přes mockovaný ElevenLabs
+  provider bez reálného API volání.
+- Prošel jsem `docs/localization/CHECKLIST.md`.
+
+Známá omezení:
+
+- Reálné volání ElevenLabs API nebylo spuštěné automaticky, aby se bez potvrzení
+  neposílal obsah do externí služby a nespotřebovával kredit.
+- Desktopový hlas přes ElevenLabs vyžaduje výslovnou volbu provideru ElevenLabs v
+  nastavení nebo hodnotu `JARVIS_VOICE_PROVIDER="elevenlabs"` v lokálním `.env`.
+
+## 2026-06-19 — FEAT-011 — Oprava Telegram hlasových odpovědí přes ElevenLabs
+
+Stav: `DONE`
+
+Provedeno:
+
+- Odpověď na externí Telegram dotaz se po předání čekajícímu Telegram handleru už
+  neposílá do lokální ElevenLabs fronty pro přehrání na desktopové stanici.
+- `_notify_text_reply` nyní vrací informaci, zda odpověď převzal externí klient.
+- Telegram TTS nejdřív zkouší MP3 soubor a při selhání použije WAV soubor z PCM
+  výstupu ElevenLabs.
+- ElevenLabs provider při HTTP chybě přidává krátký detail odpovědi API do
+  diagnostické výjimky.
+- Dokumentace Telegram bridge a přehled `features` byly aktualizované podle
+  nového chování.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile main.py features\001_elevenlabs_voice\provider.py features\002_telegram_bridge\bridge.py`
+- Smoke test potvrdil, že externí Telegram odpověď se označí jako doručená a
+  desktopová větev ji může přeskočit.
+- Smoke test potvrdil WAV fallback při simulovaném selhání MP3 syntézy bez
+  reálného ElevenLabs API volání.
+- Prošel jsem `docs/localization/CHECKLIST.md`.
+
+Známá omezení:
+
+- Reálné odeslání MP3 nebo WAV odpovědi přes Telegram Bot API nebylo spuštěné
+  automaticky, protože vyžaduje síťové volání a skutečný bot token.
+- Pokud ElevenLabs selže i při PCM syntéze, Telegram dál vrátí textový fallback.
+
+## 2026-06-19 — FEAT-012 — Windows TTS fallback pro Telegram hlasové odpovědi
+
+Stav: `DONE`
+
+Provedeno:
+
+- Telegram hlasová odpověď nyní používá více kroků: ElevenLabs MP3, ElevenLabs
+  PCM/WAV a nakonec lokální Windows SAPI WAV.
+- Pokud ElevenLabs selže nebo není nakonfigurovaný, aplikace se pokusí vytvořit
+  WAV soubor přes lokální Windows hlasový engine.
+- Windows TTS fallback předává text a cílovou cestu do PowerShellu přes lokální
+  environment proměnné procesu, aby se předešlo chybám escapování argumentů.
+- Debug log zapisuje důvod selhání ElevenLabs i Windows TTS větve.
+- Dokumentace Telegram bridge a přehled `features` byly aktualizované podle
+  nového fallbacku.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile main.py features\001_elevenlabs_voice\provider.py features\002_telegram_bridge\bridge.py`
+- Smoke test potvrdil směrování na Windows fallback při simulovaném selhání
+  ElevenLabs.
+- Lokální test potvrdil, že Windows SAPI přes PowerShell vytvoří platný WAV soubor.
+- Integrační smoke test potvrdil, že při simulovaném selhání ElevenLabs vznikne
+  Telegram audio soubor `*_windows.wav`.
+- Prošel jsem `docs/localization/CHECKLIST.md`.
+
+Známá omezení:
+
+- Reálné odeslání fallback WAV souboru přes Telegram Bot API nebylo spuštěné
+  automaticky, protože vyžaduje síťové volání a skutečný bot token.
+- Windows fallback používá systémový Windows hlas, takže nemusí znít stejně jako
+  vybraný ElevenLabs hlas.
+
+## 2026-06-19 — FEAT-013 — Gemini Live hlas pro Telegram odpovědi
+
+Stav: `DONE`
+
+Provedeno:
+
+- Windows SAPI fallback pro Telegram hlasové odpovědi byl odpojený, protože
+  používal jiný systémový hlas než desktopová aplikace.
+- Hlasový Telegram dotaz při aktivním Gemini Live provideru sbírá audio chunky
+  z `response.data` a ukládá je do WAV souboru pro Telegram.
+- Audio odpověď určená pro Telegram se nepřehrává lokálně na desktopové stanici.
+- Textový Telegram dotaz dál vrací text a případné Live audio se při externím
+  pending dotazu neposílá do lokálních reproduktorů.
+- Při aktivním ElevenLabs provideru zůstává Telegram hlasová odpověď napojená na
+  ElevenLabs MP3/PCM syntézu; Windows TTS se už nepoužívá.
+- Dokumentace Telegram bridge a přehled `features` byly aktualizované podle
+  nového chování.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile main.py features\001_elevenlabs_voice\provider.py features\002_telegram_bridge\bridge.py`
+- Smoke test potvrdil vytvoření WAV souboru z nasbíraných Gemini Live audio chunků.
+- Smoke test potvrdil, že textový Telegram dotaz potlačí lokální audio bez ukládání
+  a hlasový Telegram dotaz audio chunky uloží.
+- Smoke test potvrdil, že bez pending externího dotazu se audio dál může přehrát
+  lokálně běžnou desktopovou cestou.
+- Prošel jsem `docs/localization/CHECKLIST.md`.
+
+Známá omezení:
+
+- Reálné odeslání Gemini Live WAV souboru přes Telegram Bot API nebylo spuštěné
+  automaticky, protože vyžaduje síťové volání a skutečný bot token.
+- Gemini Live hlas pro Telegram je dostupný při aktivním Gemini provideru. Pokud
+  je desktop přepnutý na ElevenLabs, Telegram použije ElevenLabs syntézu.

@@ -14,7 +14,7 @@ LEGACY_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
 DEFAULT_CONFIG = {
     "gemini_api_key": "",
     "voice": "Charon",
-    "voice_provider": "auto",
+    "voice_provider": "gemini",
     "youtube_api_key": "",
     "youtube_channel_handle": "",
     "elevenlabs_api_key": "",

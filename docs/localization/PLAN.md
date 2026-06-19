@@ -35,11 +35,19 @@ Aktualizováno: 2026-06-19
 | UI-002 | Oprava přepínání hlasu za běhu | DONE |
 | UI-003 | Přepínač hlasového provideru v dashboardu | DONE |
 | UI-004 | Hlasové nastavení pouze v panelu nastavení | DONE |
+| UI-005 | Spouštění dashboardu v samostatném okně | DONE |
 | FEAT-002 | Napojení ElevenLabs na živý hlasový výstup | DONE |
 | FEAT-003 | Stabilizace výchozího hlasového provideru | DONE |
 | FEAT-004 | Oprava ElevenLabs režimu pro native audio model | DONE |
 | FEAT-005 | Fallback při nedostupném ElevenLabs účtu | DONE |
 | FEAT-006 | Telegram bridge pro textovou komunikaci | DONE |
+| FEAT-007 | Telegram bridge pro hlasové zprávy a servisní příkazy | DONE |
+| FEAT-008 | Telegram hlasové odpovědi podle typu vstupu | DONE |
+| FEAT-009 | Dočasné vypnutí ElevenLabs runtime feature | DONE |
+| FEAT-010 | Opětovné zapnutí ElevenLabs runtime feature | DONE |
+| FEAT-011 | Oprava Telegram hlasových odpovědí přes ElevenLabs | DONE |
+| FEAT-012 | Windows TTS fallback pro Telegram hlasové odpovědi | DONE |
+| FEAT-013 | Gemini Live hlas pro Telegram odpovědi | DONE |
 | SEC-001 | Přesun citlivé konfigurace do `.env` | DONE |
 
 ## L10N-001 — Jádro a prompt
@@ -217,6 +225,7 @@ Stav: `IN PROGRESS`
 - [x] Ověřit syntaxi a importy po přejmenování.
 - [x] Zapsat průběžný výsledek do historie.
 - [x] Otestovat a přesunout `open_app` do `actions/003_open_app`.
+- [x] Upravit `open_app`, aby spouštěl aplikace odděleně v samostatném Windows okně.
 - [ ] Otestovat a přesunout zbývající akce do číslovaných podadresářů.
 
 ## ACT-003 — Katalog popisů nástrojů pro agenta
@@ -362,6 +371,17 @@ Stav: `DONE`
 - [x] Ověřit syntaxi `ui.py`, `main.py` a konfiguraci.
 - [x] Zapsat výsledek do historie.
 
+## UI-005 — Spouštění dashboardu v samostatném okně
+
+Stav: `DONE`
+
+- [x] Změnit výchozí start dashboardu z fullscreen režimu na běžné samostatné okno.
+- [x] Povolit zmenšení okna na menší použitelné rozměry.
+- [x] Přepočítávat layout při ruční změně velikosti okna.
+- [x] Zachovat ruční přepnutí fullscreen režimu přes klávesové zkratky.
+- [x] Ověřit syntaxi `ui.py`.
+- [x] Zapsat výsledek do historie.
+
 ## FEAT-002 — ElevenLabs jako živý hlasový výstup
 
 Stav: `DONE`
@@ -417,6 +437,84 @@ Stav: `DONE`
 - [x] Přijímat hlasové zprávy a připravit místo pro navazující STT krok.
 - [x] Aktualizovat dokumentaci feature.
 - [x] Ověřit syntaxi a bezpečné smoke testy bez reálného Telegram API volání.
+- [x] Zapsat výsledek do historie.
+
+## FEAT-007 — Telegram bridge pro hlasové zprávy a servisní příkazy
+
+Stav: `DONE`
+
+- [x] Přidat servisní Telegram příkazy pro ověření bota a zjištění `chat_id`.
+- [x] Přepisovat Telegram hlasové zprávy do textu přes Gemini.
+- [x] Předat přepsaný text do stejné agentní cesty jako textovou Telegram zprávu.
+- [x] Aktualizovat `.env.example` a dokumentaci feature.
+- [x] Ověřit syntaxi a bezpečné smoke testy bez reálného Telegram API volání.
+- [x] Zapsat výsledek do historie.
+
+## FEAT-008 — Telegram hlasové odpovědi podle typu vstupu
+
+Stav: `DONE`
+
+- [x] Zachovat textovou odpověď pro textové Telegram dotazy.
+- [x] U hlasových Telegram dotazů převést odpověď agenta na audio soubor.
+- [x] Odeslat audio odpověď zpět do Telegramu.
+- [x] Přidat textový fallback, pokud TTS není nakonfigurované nebo selže.
+- [x] Aktualizovat dokumentaci feature.
+- [x] Ověřit syntaxi a bezpečné smoke testy bez reálného Telegram API volání.
+- [x] Zapsat výsledek do historie.
+
+## FEAT-009 — Dočasné vypnutí ElevenLabs runtime feature
+
+Stav: `DONE`
+
+- [x] Vynutit Gemini Live jako jediný aktivní hlasový provider v runtime.
+- [x] Skrýt nebo deaktivovat ElevenLabs volbu v dashboardu.
+- [x] U Telegram hlasových dotazů vracet textový fallback místo ElevenLabs audio odpovědi.
+- [x] Aktualizovat dokumentaci ElevenLabs a Telegram feature.
+- [x] Ověřit syntaxi a bezpečné smoke testy bez externího API volání.
+- [x] Zapsat výsledek do historie.
+
+## FEAT-010 — Opětovné zapnutí ElevenLabs runtime feature
+
+Stav: `DONE`
+
+- [x] Znovu povolit ElevenLabs runtime v backendu aplikace.
+- [x] Vrátit ElevenLabs provider do panelu nastavení dashboardu.
+- [x] Obnovit ElevenLabs audio odpovědi pro hlasové Telegram dotazy.
+- [x] Aktualizovat dokumentaci ElevenLabs a Telegram feature.
+- [x] Ověřit syntaxi a bezpečné smoke testy bez externího API volání.
+- [x] Zapsat výsledek do historie.
+
+## FEAT-011 — Oprava Telegram hlasových odpovědí přes ElevenLabs
+
+Stav: `DONE`
+
+- [x] Zabránit lokálnímu přehrání odpovědi, která patří externímu Telegram dotazu.
+- [x] Přidat záložní formát pro Telegram audio odpověď, pokud MP3 syntéza selže.
+- [x] Zpřesnit diagnostiku selhání ElevenLabs TTS.
+- [x] Ověřit syntaxi a bezpečné smoke testy bez externího API volání.
+- [x] Zapsat výsledek do historie.
+
+## FEAT-012 — Windows TTS fallback pro Telegram hlasové odpovědi
+
+Stav: `DONE`
+
+- [x] Přidat lokální Windows SAPI fallback pro Telegram hlasové odpovědi.
+- [x] Zachovat ElevenLabs jako primární TTS cestu pro Telegram.
+- [x] Zapsat do debug logu důvody selhání jednotlivých TTS cest.
+- [x] Aktualizovat dokumentaci Telegram bridge.
+- [x] Ověřit syntaxi a bezpečné smoke testy bez externího API volání.
+- [x] Zapsat výsledek do historie.
+
+## FEAT-013 — Gemini Live hlas pro Telegram odpovědi
+
+Stav: `DONE`
+
+- [x] Odpojit Windows TTS fallback pro Telegram hlasové odpovědi.
+- [x] U Gemini provideru ukládat Live audio odpověď do WAV souboru pro Telegram.
+- [x] Zachovat ElevenLabs syntézu pouze při aktivním ElevenLabs provideru.
+- [x] Zabránit lokálnímu přehrání audio odpovědi určené pro Telegram.
+- [x] Aktualizovat dokumentaci Telegram bridge.
+- [x] Ověřit syntaxi a bezpečné smoke testy bez externího API volání.
 - [x] Zapsat výsledek do historie.
 
 ## SEC-001 — Citlivá konfigurace v `.env`

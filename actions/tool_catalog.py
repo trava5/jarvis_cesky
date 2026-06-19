@@ -16,7 +16,8 @@ TOOL_CATALOG: dict[str, dict[str, Any]] = {
             "Otevře aplikaci ve Windows podle názvu, českého aliasu, spustitelného "
             "souboru v PATH nebo podporovaného Windows URI schématu. Použij, když "
             "uživatel chce otevřít aplikaci, nastavení, Průzkumník souborů nebo "
-            "běžný systémový nástroj."
+            "běžný systémový nástroj. Spuštění se předává Windows neblokujícím "
+            "způsobem v samostatném okně."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -48,8 +49,9 @@ TOOL_CATALOG: dict[str, dict[str, Any]] = {
             ],
             "verified_on": "2026-06-19",
             "verification": (
-                "Ověřena syntaxe, import přes loader, katalogová deklarace a bezpečný "
-                "smoke test validace prázdného názvu bez otevírání aplikací."
+                "Ověřena syntaxe, import přes loader, katalogová deklarace, bezpečný "
+                "smoke test validace prázdného názvu bez otevírání aplikací a "
+                "neblokující sestavení Windows start příkazu."
             ),
         },
     },

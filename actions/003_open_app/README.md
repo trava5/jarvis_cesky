@@ -14,3 +14,7 @@ Agent používá tuto akci přes nástroj `open_app`, který je popsaný v
 
 Akce podporuje běžné názvy aplikací, české aliasy a vybraná Windows URI schémata,
 například `ms-settings:` nebo `outlookcal:`.
+
+Spouštění probíhá neblokujícím způsobem. Aplikace a konzolové nástroje se předají
+Windows jako samostatné okno, aby akce nedržela běžící relaci asistenta čekáním
+na otevřený proces.
