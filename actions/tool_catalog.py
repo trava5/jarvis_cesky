@@ -7,6 +7,52 @@ from typing import Any
 
 
 TOOL_CATALOG: dict[str, dict[str, Any]] = {
+    "open_app": {
+        "name": "open_app",
+        "module": "actions.003_open_app.open_app",
+        "function": "open_app",
+        "status": "verified",
+        "description": (
+            "Otevře aplikaci ve Windows podle názvu, českého aliasu, spustitelného "
+            "souboru v PATH nebo podporovaného Windows URI schématu. Použij, když "
+            "uživatel chce otevřít aplikaci, nastavení, Průzkumník souborů nebo "
+            "běžný systémový nástroj."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "app_name": {
+                    "type": "STRING",
+                    "description": (
+                        "Název aplikace nebo alias, například Spotify, Chrome, Terminal, "
+                        "Průzkumník souborů, Nastavení nebo Kalendář."
+                    ),
+                },
+            },
+            "required": ["app_name"],
+        },
+        "agent_notes": {
+            "use_when": [
+                "Uživatel výslovně chce otevřít aplikaci nebo systémové nastavení.",
+                "Uživatel chce spustit běžný Windows nástroj, například kalkulačku nebo Průzkumník.",
+            ],
+            "do_not_use_when": [
+                "Uživatel chce najít informace na webu; použij browser_control.",
+                "Uživatel chce přehrát konkrétní hudbu nebo video; použij mediální nástroj.",
+                "Uživatel chce ověřit, že se aplikace skutečně plně načetla; nástroj umí potvrdit jen předání spuštění systému.",
+            ],
+            "examples": [
+                'Otevři Chrome -> open_app(app_name="Chrome")',
+                'Spusť Průzkumník souborů -> open_app(app_name="Průzkumník souborů")',
+                'Otevři nastavení -> open_app(app_name="Nastavení")',
+            ],
+            "verified_on": "2026-06-19",
+            "verification": (
+                "Ověřena syntaxe, import přes loader, katalogová deklarace a bezpečný "
+                "smoke test validace prázdného názvu bez otevírání aplikací."
+            ),
+        },
+    },
     "get_weather": {
         "name": "get_weather",
         "module": "actions.001_weather.weather",

@@ -37,7 +37,7 @@ záznam v katalogu; bez něj není akce považovaná za dokončenou.
 
 | Modul | Zapojení v `main.py` | Stav | Poznámka |
 |---|---:|---|---|
-| `open_app.py` | ano | funkční s omezením | Otevírá aplikace přes aliasy, PATH, URI schémata a `start`. Úspěch u některých aplikací nelze spolehlivě ověřit. |
+| `003_open_app/` | ano | ověřeno s omezením | Otevírá aplikace přes aliasy, PATH, URI schémata a `start`. Úspěch u některých aplikací nelze spolehlivě ověřit. Popis nástroje je v `actions/tool_catalog.py`. |
 | `sys_info.py` | ano | částečně funkční | Importuje se i bez `psutil`; některé dotazy pak používají Windows fallback, CPU/RAM bez `psutil` vrací omezené informace. |
 | `shell.py` | ano | funkční s rizikem | Spouští shell příkazy a má bloklist destruktivních příkazů. Bloklist není bezpečnostní sandbox. |
 | `002_calendar/` | ano | ověřeno s konfigurací | Používá Google Calendar API přes OAuth. Umí číst události podle období, názvu a kalendáře, přidávat události a odstraňovat shody. Bez OAuth credentials vrací srozumitelnou konfigurační hlášku. |

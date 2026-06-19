@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 JARVIS Windows — jádro hlasového asistenta v reálném čase
 Pracovní postup přizpůsobený prostředí Windows
@@ -29,7 +29,6 @@ from memory.memory_manager import (
     save_long_term_decision,
     format_long_term_decisions_for_prompt,
 )
-from actions.open_app import open_app
 from actions.sys_info  import sys_info
 from actions.reminders import get_reminders, add_reminder
 from actions.browser   import browser_control
@@ -61,6 +60,10 @@ delete_calendar_event = load_action_function(
     "actions.002_calendar.calendar",
     "delete_calendar_event",
 )
+open_app = load_action_function(
+    "actions.003_open_app.open_app",
+    "open_app",
+)
 
 # ── Paths ───────────────────────────────────────────────────────────────────
 BASE_DIR        = Path(__file__).resolve().parent
@@ -83,20 +86,7 @@ pya              = pyaudio.PyAudio()
 
 # ── Definice nástrojů ───────────────────────────────────────────────────────
 TOOL_DECLARATIONS = [
-    {
-        "name": "open_app",
-        "description": "Otevře libovolnou aplikaci ve Windows, například Spotify, Chrome, Terminál, Průzkumník souborů nebo VS Code.",
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "app_name": {
-                    "type": "STRING",
-                    "description": "Název aplikace, například 'Spotify', 'Chrome' nebo 'Terminal'"
-                }
-            },
-            "required": ["app_name"]
-        }
-    },
+    get_tool_declaration("open_app"),
     {
         "name": "sys_info",
         "description": "Získá systémové informace: stav baterie, CPU, RAM, disk, čas, datum nebo síťové připojení.",

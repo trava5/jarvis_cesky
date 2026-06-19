@@ -1015,3 +1015,34 @@ Známá omezení:
 
 - Oddělené agentní runtime rozhraní zatím není implementované v kódu. Toto ADR
   stanovuje směr pro další refaktor.
+
+## 2026-06-19 — ACT-002 — Přesun akce `open_app`
+
+Stav: `IN PROGRESS`
+
+Provedeno:
+
+- Plochý modul `actions/open_app.py` byl přesunut do číslovaného podadresáře
+  `actions/003_open_app/open_app.py`.
+- `main.py` načítá funkci `open_app` přes `actions/action_loader.py`.
+- Deklarace nástroje `open_app` byla přesunuta z ručního bloku v `main.py` do
+  `actions/tool_catalog.py`.
+- Přidána dokumentace `actions/003_open_app/README.md`.
+- Aktualizován plán a revizní přehled akčních modulů.
+
+Ověření:
+
+- `C:\Users\travn\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe -m py_compile main.py actions\tool_catalog.py actions\action_loader.py actions\003_open_app\open_app.py actions\003_open_app\__init__.py`
+- Smoke test importu přes loader a katalogové deklarace `open_app`.
+- Smoke test prázdného názvu aplikace bez otevírání externích programů.
+- Cílená kontrola, že v kódu nezůstává import `actions.open_app`.
+
+Známá omezení:
+
+- Nebyl spouštěn test, který by skutečně otevřel aplikaci ve Windows, aby se bez
+  výslovného pokynu neměnil stav uživatelského prostředí.
+- Projektové `.\.venv\Scripts\python.exe` ani `.\venv\Scripts\python.exe` se v
+  aktuálním prostředí nespustily, protože odkazují na nedostupný základní
+  interpreter `C:\Users\travn\AppData\Local\Programs\Python\Python311\python.exe`.
+- `ACT-002` zůstává rozpracovaný, protože další ploché akční moduly ještě čekají
+  na postupnou revizi a přesun.

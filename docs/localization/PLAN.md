@@ -216,6 +216,7 @@ Stav: `IN PROGRESS`
 - [x] Aktualizovat napojení v `main.py`.
 - [x] Ověřit syntaxi a importy po přejmenování.
 - [x] Zapsat průběžný výsledek do historie.
+- [x] Otestovat a přesunout `open_app` do `actions/003_open_app`.
 - [ ] Otestovat a přesunout zbývající akce do číslovaných podadresářů.
 
 ## ACT-003 — Katalog popisů nástrojů pro agenta
