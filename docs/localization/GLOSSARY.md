@@ -47,6 +47,8 @@
 | Legacy flat module | Starší plochý modul |
 | Agent profile | Profil agenta |
 | Shared runtime foundation | Sdílený runtime základ |
+| Agent backend | Agentní backend |
+| Agent runtime | Agentní runtime |
 | Specialized agent | Specializovaný agent |
 
 Konkrétní volba mezi variantami závisí na prostoru v UI. V hlasových odpovědích

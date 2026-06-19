@@ -988,3 +988,30 @@ Známá omezení:
   allowlist chat ID.
 - Hlasové zprávy zatím nejsou přepisované do textu. Další krok musí doplnit STT
   nebo konverzi Telegram OGG/Opus audia do podporovaného formátu.
+
+## 2026-06-19 — ARCH-004 — Telegram jako klientský kanál nad backendem agenta
+
+Stav: `DONE`
+
+Provedeno:
+
+- Doplněno ADR-015: komunikační kanály jsou klienti nad sdíleným agentním
+  backendem.
+- Upřesněno, že Telegram bridge není dashboardový přepisovač, ale samostatný
+  komunikační kanál k agentovi.
+- Do dokumentace `features` bylo doplněno pravidlo, že Desktop UI, Telegram a
+  budoucí webové nebo mobilní rozhraní mají používat stejný agentní runtime.
+- README `features/002_telegram_bridge` bylo aktualizováno podle tohoto pravidla.
+- Slovník byl doplněn o termíny `Agent backend` a `Agent runtime`.
+
+Ověření:
+
+- Zkontrolována platná ADR v `DECISIONS.md`.
+- Aktualizován plán `ARCH-004` z `IN PROGRESS` na `DONE`.
+- Prošel jsem `docs/localization/CHECKLIST.md`; změna se týká pouze Markdown
+  dokumentace, proto nebyl potřeba `py_compile`.
+
+Známá omezení:
+
+- Oddělené agentní runtime rozhraní zatím není implementované v kódu. Toto ADR
+  stanovuje směr pro další refaktor.

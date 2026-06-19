@@ -4,6 +4,9 @@ Feature pro komunikaci s JARVIS přes Telegram bota.
 
 Tato feature není agentní tool a nepatří do `actions/tool_catalog.py`. Slouží jako
 runtime komunikační kanál mezi Telegramem a běžící desktopovou relací JARVIS.
+Telegram bridge není dashboardový přepisovač. Je to klientský kanál, který má
+posílat vstupy do sdíleného agentního backendu a vracet uživateli odpovědi ze
+stejného runtime jako desktopové UI.
 
 ## Konfigurace
 
@@ -31,6 +34,9 @@ První verze podporuje:
 Hlasové zprávy zatím nejsou přepisované do textu. Navazující krok musí doplnit STT
 nebo audio převod z Telegram OGG/Opus do formátu, který umí zpracovat zvolený
 model.
+
+Další architektonický krok má oddělit explicitní agentní runtime rozhraní, které
+budou sdílet Desktop UI, Telegram a případní další klienti.
 
 ## Použití
 

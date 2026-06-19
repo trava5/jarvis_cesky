@@ -420,3 +420,35 @@ podle zaměření agenta.
   úpravami napříč nesouvisejícími soubory.
 - Aktuální aplikace zatím používá `core/prompt.txt`; profilový loader bude
   samostatný navazující krok.
+
+## ADR-015 — Komunikační kanály jako klienti nad agentním backendem
+
+Datum: 2026-06-19
+Stav: `ACCEPTED`
+
+### Kontext
+
+Telegram má sloužit jako plnohodnotný způsob komunikace s agentem z libovolného
+zařízení, ne jako přepisovač textu do dashboardu. Stejný agent má být dostupný
+přes desktopové UI, Telegram a později případné další klienty, aniž by každé
+rozhraní mělo vlastní kopii rozhodovací logiky, actions, paměti nebo promptu.
+
+### Rozhodnutí
+
+Komunikační kanály se navrhují jako klienti nad sdíleným agentním backendem.
+Desktop UI, Telegram bridge a budoucí webové nebo mobilní rozhraní mají posílat
+vstupy do stejného agentního runtime a přijímat z něj odpovědi. Telegram bridge
+zůstává běhová feature v `features`, protože nejde o tool volaný modelem přes
+function calling.
+
+### Důsledky
+
+- Telegram bridge se nesmí navrhovat jako pouhý přepisovač dashboardu.
+- Sdílené chování agenta, včetně promptu, actions, paměti a orchestrace odpovědi,
+  má být postupně oddělováno od konkrétního UI.
+- `main.py` může dočasně obsahovat napojení existujících klientů, ale nová
+  architektura má směřovat k explicitnímu agentnímu runtime rozhraní.
+- Nový komunikační klient patří do `features/NNN_name` a má používat sdílený
+  runtime, ne vlastní paralelní implementaci agenta.
+- Pokud klient zároveň zpřístupní modelu nový nástroj, tato volatelná část musí
+  být samostatně v `actions` a musí mít záznam v `actions/tool_catalog.py`.

@@ -7,6 +7,11 @@ Features tvoří sdílenou runtime vrstvu projektu. Nemají určovat zaměření
 konkrétního agenta; jen poskytují schopnosti, které si budoucí specializované
 profily mohou zapnout nebo vypnout.
 
+Komunikační features se navrhují jako klienti nad sdíleným agentním backendem.
+Nemají duplikovat prompt, paměť, actions ani rozhodovací logiku agenta. Desktop
+UI, Telegram bridge a budoucí webové nebo mobilní rozhraní mají používat stejný
+agentní runtime.
+
 Každá nová nebo revidovaná feature má vlastní číslovaný podadresář ve tvaru
 `features/NNN_name`, například `features/001_telegram` nebo
 `features/002_elevenlabs_voice`. Implementace, dokumentace, konfigurace a

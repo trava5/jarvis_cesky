@@ -1,6 +1,6 @@
 # Plán české lokalizace
 
-Aktualizováno: 2026-06-17
+Aktualizováno: 2026-06-19
 
 ## Přehled
 
@@ -29,6 +29,7 @@ Aktualizováno: 2026-06-17
 | ARCH-001 | Oddělení nástrojů a běhových vlastností asistenta | DONE |
 | ARCH-002 | Číslované podadresáře pro actions a features | DONE |
 | ARCH-003 | Architektura sdíleného základu a specializovaných profilů | DONE |
+| ARCH-004 | Telegram jako klientský kanál nad backendem agenta | DONE |
 | FEAT-001 | Feature hlasového provideru ElevenLabs | DONE |
 | UI-001 | Dashboardový přepínač hlasu | DONE |
 | UI-002 | Oprava přepínání hlasu za běhu | DONE |
@@ -295,6 +296,15 @@ Stav: `DONE`
 - [x] Založit dokumentaci pro profily agenta.
 - [x] Doplnit pravidla pro sdílené features a profilově volené actions.
 - [x] Ověřit strukturu dokumentace.
+- [x] Zapsat výsledek do historie.
+
+## ARCH-004 — Telegram jako klientský kanál nad backendem agenta
+
+Stav: `DONE`
+
+- [x] Zapsat rozhodnutí, že Telegram bridge není dashboardový přepisovač, ale samostatný klientský kanál k backendu agenta.
+- [x] Zapsat pravidlo, že Desktop UI, Telegram a budoucí klienti mají sdílet stejný agentní runtime.
+- [x] Aktualizovat dokumentaci Telegram feature podle tohoto pravidla.
 - [x] Zapsat výsledek do historie.
 
 ## FEAT-001 — ElevenLabs hlasový provider
