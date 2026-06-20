@@ -24,8 +24,18 @@ Vychozi adresa je `http://127.0.0.1:8000`.
 - `POST /api/v1/messages` prijima prvni stabilni agentni message kontrakt. Zatim
   vraci `runtime_unavailable`, protoze zivy agentni runtime jeste bezi v desktopove
   aplikaci.
-- `GET /api/v1/conversations` vraci seznam konverzacnich relaci v pameti procesu.
+- `GET /api/v1/conversations` vraci seznam konverzacnich relaci z aktivniho
+  repository.
 - `GET /api/v1/conversations/{conversation_id}` vraci detail relace vcetne zprav.
+- `POST /api/v1/memory/short-term` ulozi kratkodoby pametovy turn.
+- `GET /api/v1/memory/short-term` vraci posledni kratkodobe turny.
+- `GET /api/v1/memory/short-term/search` vyhleda text v kratkodobe pameti.
+- `DELETE /api/v1/memory/short-term` smaze kratkodobe turny starsi nez zadany
+  pocet dni.
+- `POST /api/v1/memory/decisions` ulozi potvrzene dlouhodobe rozhodnuti.
+- `GET /api/v1/memory/decisions` vraci potvrzena dlouhodoba rozhodnuti.
+- `POST /api/v1/memory/import/sqlite` importuje soucasne lokalni SQLite zaznamy
+  kratkodobe pameti a dlouhodobych rozhodnuti do aktivni backend storage vrstvy.
 
 Priklad zpravy:
 
@@ -39,18 +49,21 @@ Priklad zpravy:
 }
 ```
 
-Konverzacni relace jsou v tomto kroku pouze docasne in-memory uloziste. Po
-restartu backendu se ztrati. Trvale ulozeni do PostgreSQL je dalsi migracni krok.
-
 API uz nepouziva konkretni in-memory uloziste primo. Konverzace jdou pres
-`ConversationRepository` a factory `create_conversation_repository`. PostgreSQL
-implementace se doplni jako dalsi cast `MIG-003`; do te doby factory vraci
-in-memory fallback.
+`ConversationRepository` a factory `create_conversation_repository`. Bez
+`DATABASE_URL` factory vraci in-memory fallback. Pri nastavene databazi pouzije
+PostgreSQL repository nad SQLAlchemy modely; pokud pripojeni k databazi selze,
+backend zustane funkcni nad in-memory fallbackem.
 
 Databazove schéma pro PostgreSQL uz ma SQLAlchemy 2.0 modely v `backend/db`.
 Modely `Client`, `Conversation` a `Message` pripravuji tabulky `clients`,
 `conversations` a `messages`, vcetne zakladnich vazeb, indexu a timestampu.
-Repository je zatim na tyto modely jeste nepripojena.
+Repository pri prvnim pouziti provede vyvojovou inicializaci schematu pres
+`Base.metadata.create_all`.
+
+Backend storage vrstva pro pamet pridava tabulky `short_term_memory_turns` a
+`long_term_decisions`. Import ze SQLite je idempotentni: opakovane spusteni
+importu nepridava duplicitni zaznamy se stejnou identitou.
 
 ## Konfigurace
 
@@ -59,7 +72,14 @@ JARVIS_BACKEND_HOST="127.0.0.1"
 JARVIS_BACKEND_PORT="8000"
 JARVIS_BACKEND_RELOAD="false"
 DATABASE_URL=""
+DATABASE_NAME="postgres"
+DATABASE_USER=""
+DATABASE_PASS=""
+DATABASE_SCHEMA=""
 ```
 
 `DATABASE_URL` bude smerovat na PostgreSQL, napriklad pres async driver
-`postgresql+asyncpg://...`. Skutecny connection string se neverzuje.
+`postgresql+asyncpg://...`. Pokud URL neobsahuje prihlaseni, backend doplni
+`DATABASE_USER` a `DATABASE_PASS`. Pokud URL neobsahuje nazev databaze, pouzije
+se `DATABASE_NAME`. `DATABASE_SCHEMA` je volitelne databazove schema, napriklad
+pro oddeleni vyvojovych tabulek. Skutecny connection string se neverzuje.

@@ -9,8 +9,8 @@ Telegram bridge, mobilní rozhraní nebo konkrétní profil agenta.
 ## Aktuální stav
 
 ElevenLabs runtime je znovu povolený. Desktopová aplikace ho použije při výslovné
-volbě provideru `elevenlabs` v nastavení nebo v `.env`. Telegram bridge ho používá
-pro audio odpovědi na hlasové dotazy, pokud je ElevenLabs správně nakonfigurovaný.
+volbě provideru `elevenlabs` v nastavení nebo v `.env`. Telegram bridge už
+ElevenLabs nepoužívá pro odpovědi; Telegram výstup je vždy textový.
 
 ## Konfigurace
 

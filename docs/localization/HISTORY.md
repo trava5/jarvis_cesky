@@ -1526,3 +1526,212 @@ Známé omezení:
   in-memory fallback přes `ConversationRepository`.
 - Inicializace databázového schématu a přepnutí factory podle `DATABASE_URL`
   zůstává v dalších kontrolních bodech `MIG-003`.
+
+## 2026-06-20 — DOC-001 — Uložení stavu projektu a konverzace před restartem
+
+Stav: `DONE`
+
+Provedeno:
+
+- Přidán `docs/PROJECT_STATE.md` s aktuálním stavem migrace, dokončenými kroky,
+  rozpracovaným `MIG-003`, důležitými soubory a doporučeným dalším krokem.
+- Přidán `docs/CONVERSATION_STATE.md` s pracovním kontextem aktuální konverzace a
+  doporučeným promptem pro navázání po restartu.
+- Stav byl uložen bez hodnot z `.env`, tokenů, API klíčů a databázových connection
+  stringů.
+- `docs/localization/PLAN.md` doplněn o dokumentační krok `DOC-001`.
+
+Ověření:
+
+- Zkontrolováno, že stav navazuje na `MIG-003` v `docs/MIGRATION_PLAN.md`.
+- Prošel jsem `docs/localization/CHECKLIST.md` v rozsahu relevantním pro
+  dokumentační změnu.
+
+Známé omezení:
+
+- Nebyly spouštěny Python testy, protože změna upravuje pouze Markdown
+  dokumentaci.
+
+## 2026-06-20 — ARCH-010 — PostgreSQL repository pro konverzační data
+
+Stav: `IN PROGRESS`
+
+Provedeno:
+
+- `ConversationRepository` bylo převedeno na async rozhraní, aby backend mohl
+  používat SQLAlchemy async engine bez blokování FastAPI event loopu.
+- Přidán `PostgresConversationRepository` nad modely `Client`, `Conversation` a
+  `Message`.
+- Přidány DB utility pro vytvoření async engine, `async_sessionmaker`, nastavení
+  `search_path` a vývojovou inicializaci schématu přes `Base.metadata.create_all`.
+- `backend/storage.py` při nastaveném `DATABASE_URL` vytváří PostgreSQL repository.
+- Bez `DATABASE_URL` zůstává zachovaný in-memory fallback.
+- Při nastavené, ale nedostupné nebo chybně autentizované databázi backend bezpečně
+  přechází na in-memory fallback místo pádu endpointu.
+- Doplněna volitelná konfigurace `DATABASE_SCHEMA` do backend nastavení a
+  `.env.example`.
+- Aktualizovány `docs/MIGRATION_PLAN.md`, `backend/README.md` a slovník termínů.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile backend\config.py backend\database.py backend\storage.py backend\api.py backend\services\agent_runtime.py backend\services\conversations.py backend\services\postgres_conversations.py backend\db\session.py backend\db\models.py`
+- API smoke test bez databáze ověřil `POST /api/v1/messages`,
+  `GET /api/v1/conversations` a `GET /api/v1/conversations/{conversation_id}`.
+- API smoke test s nastaveným `DATABASE_URL` a chybně autentizovanou lokální
+  PostgreSQL databází ověřil bezpečný přechod na in-memory fallback.
+- `GET /api/v1/status` při chybné autentizaci hlásí databázi jako nakonfigurovanou,
+  ale nedostupnou.
+- Prošel jsem `docs/localization/CHECKLIST.md` v rozsahu relevantním pro backend
+  změnu.
+
+Známé omezení:
+
+- Reálný zápis do PostgreSQL nebyl dokončen, protože lokální PostgreSQL server
+  vyžaduje heslo pro dostupné uživatele. Zbývá doplnit platné přihlášení nebo
+  upravit lokální autentizaci a provést plný PostgreSQL smoke test.
+- `ARCH-010` a `MIG-003` proto zůstávají rozpracované.
+
+## 2026-06-20 — ARCH-010 — Test PostgreSQL připojení přes `.env`
+
+Stav: `IN PROGRESS`
+
+Provedeno:
+
+- Backend konfigurace byla rozšířena o samostatné `DATABASE_USER`,
+  `DATABASE_PASS` a `DATABASE_NAME`.
+- Tvorba SQLAlchemy async engine nyní umí doplnit uživatele, heslo a název databáze
+  do `DATABASE_URL`, pokud je URL neobsahuje.
+- Databázový health check nyní rozlišuje funkční spojení od stavu, kdy cílové
+  schéma neexistuje a uživatel ho nemůže vytvořit.
+- `.env.example` a `backend/README.md` byly aktualizovány o nové databázové
+  proměnné bez skutečných hodnot.
+- Bylo provedeno testovací připojení k PostgreSQL přes hodnoty z lokálního `.env`.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile backend\config.py backend\db\session.py backend\database.py backend\storage.py backend\services\postgres_conversations.py`
+- Připojení k databázi vrátilo `SELECT 1`.
+- `GET /api/v1/status` vrací databázi jako nakonfigurovanou, ale nepřipravenou pro
+  zápis kvůli chybějícímu schématu a nedostatečnému oprávnění.
+- Ověření práv potvrdilo, že cílové schéma zatím neexistuje a použitý databázový
+  uživatel nemá oprávnění `CREATE` nad databází.
+- Skutečné hodnoty z `.env`, uživatelské heslo ani connection string nebyly
+  vypsány do dokumentace.
+
+Známé omezení:
+
+- Plný PostgreSQL repository smoke test zatím nemůže vytvořit schéma ani tabulky.
+  Je potřeba vytvořit cílové schéma ručně nebo udělit databázovému uživateli
+  potřebné oprávnění.
+
+## 2026-06-20 — ARCH-010 — Dokončení PostgreSQL repository smoke testu
+
+Stav: `DONE`
+
+Provedeno:
+
+- Po úpravě databázových oprávnění bylo znovu ověřeno PostgreSQL připojení přes
+  hodnoty z lokálního `.env`.
+- Vývojová inicializace schématu vytvořila tabulky `clients`, `conversations` a
+  `messages`.
+- Přímý test `PostgresConversationRepository` ověřil vytvoření konverzace, zápis
+  uživatelské a asistentovy zprávy, čtení detailu relace a seznam konverzací.
+- Backend API smoke test přes `TestClient` ověřil `/api/v1/status`,
+  `POST /api/v1/messages`, `GET /api/v1/conversations/{conversation_id}` a
+  `GET /api/v1/conversations`.
+- `docs/MIGRATION_PLAN.md` a `docs/localization/PLAN.md` byly aktualizovány a
+  `MIG-003` / `ARCH-010` jsou označené jako dokončené.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile backend\config.py backend\db\session.py backend\database.py backend\storage.py backend\services\postgres_conversations.py backend\api.py backend\services\agent_runtime.py`
+- Přímá inicializace databáze potvrdila dostupné cílové schéma a tabulky
+  `clients`, `conversations`, `messages`.
+- API smoke test zapsal testovací konverzaci do PostgreSQL a následná SQL kontrola
+  potvrdila jednoho klienta, jednu konverzaci a dvě zprávy pro testovací relaci.
+- Prošel jsem `docs/localization/CHECKLIST.md` v rozsahu relevantním pro backend
+  změnu.
+
+Známé omezení:
+
+- TestClient musí být při více požadavcích nad asyncpg repository použitý jako
+  context manager, aby testovací event loop zůstal během celé smoke sady otevřený.
+- Migrace stávající krátkodobé paměti a dlouhodobých rozhodnutí do PostgreSQL
+  zůstává navazující krok `MIG-004`.
+
+## 2026-06-20 — ARCH-011 — Backend storage pro krátkodobou paměť a dlouhodobá rozhodnutí
+
+Stav: `DONE`
+
+Provedeno:
+
+- Do SQLAlchemy modelů byly přidány tabulky `short_term_memory_turns` a
+  `long_term_decisions`.
+- Přidáno repository rozhraní `MemoryRepository`, in-memory fallback a
+  `PostgresMemoryRepository`.
+- `backend/storage.py` nyní vytváří memory repository podle stejného pravidla jako
+  conversation repository: PostgreSQL při nastavené databázi, jinak in-memory
+  fallback.
+- Přidány backend API endpointy pro zápis, čtení, vyhledávání a promazání
+  krátkodobé paměti.
+- Přidány backend API endpointy pro zápis a čtení dlouhodobých rozhodnutí.
+- Přidán idempotentní import současných SQLite záznamů přes
+  `POST /api/v1/memory/import/sqlite`.
+- `docs/MIGRATION_PLAN.md`, `backend/README.md`, slovník a lokalizační plán byly
+  aktualizovány podle dokončeného `MIG-004`.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile backend\db\models.py backend\schemas.py backend\storage.py backend\api.py backend\services\memory.py backend\services\postgres_memory.py backend\services\memory_migration.py`
+- In-memory fallback bez databáze ověřil zápis, čtení a vyhledání krátkodobého
+  turnu i zápis a čtení dlouhodobého rozhodnutí.
+- PostgreSQL API smoke test ověřil `/api/v1/status`,
+  `POST /api/v1/memory/short-term`, `GET /api/v1/memory/short-term`,
+  `GET /api/v1/memory/short-term/search`, `POST /api/v1/memory/decisions` a
+  `GET /api/v1/memory/decisions`.
+- Přímá SQL kontrola potvrdila existenci tabulek `short_term_memory_turns` a
+  `long_term_decisions` a fyzický zápis testovacích záznamů.
+- SQLite import přenesl 228 krátkodobých turnů a 1 dlouhodobé rozhodnutí; druhé
+  spuštění importu přidalo 0 duplicit.
+- Prošel jsem `docs/localization/CHECKLIST.md` v rozsahu relevantním pro backend
+  změnu.
+
+Známé omezení:
+
+- Běžné dlouhodobé faktické záznamy z `memory_items` zůstávají v kompatibilní
+  lokální SQLite vrstvě. Jejich případný přesun do sdíleného backend storage je
+  samostatné navazující rozhodnutí.
+
+## 2026-06-20 — FEAT-014 — Telegram pouze s textovými odpověďmi
+
+Stav: `DONE`
+
+Provedeno:
+
+- Telegram bridge dál přijímá textové zprávy a hlasové zprávy.
+- Hlasové zprávy se dál stahují a přepisují přes Gemini do textu.
+- Odesílání audio odpovědí přes Telegram bylo odstraněno z bridge i z napojení v
+  `main.py`.
+- Telegram po textovém i hlasovém vstupu odpovídá pouze textovou zprávou přes
+  `sendMessage`.
+- Dokumentace Telegram bridge, ElevenLabs feature, přehled features a migrační
+  plán byly aktualizované podle nového chování.
+- Návratové soubory `docs/PROJECT_STATE.md` a `docs/CONVERSATION_STATE.md` byly
+  aktualizované pro rozpracovaný `MIG-005`.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile main.py features\002_telegram_bridge\bridge.py`
+- Izolovaný smoke test `TelegramBotBridge` bez externího Telegram API volání
+  ověřil, že textový i hlasový update používají `sendMessage` a nevolají
+  `sendAudio`.
+- `git diff --check`
+- Prošel jsem `docs/localization/CHECKLIST.md` v rozsahu relevantním pro změnu
+  Telegram feature.
+
+Známé omezení:
+
+- Telegram bridge po této změně stále volá živý desktopový runtime přes `main.py`.
+  Přímé napojení na backend API zůstává další část rozpracovaného `MIG-005`.
+- Desktopový `memory/memory_manager.py` zůstává kompatibilní přechodová vrstva;
+  nový backend storage je připravený pro klienty a budoucí přesun runtime.

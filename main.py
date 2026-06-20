@@ -12,7 +12,6 @@ import traceback
 import os
 import re
 import uuid
-import wave
 from importlib import import_module
 from pathlib import Path
 
@@ -98,7 +97,6 @@ def get_telegram_transcription_model() -> str:
 # ── Model ───────────────────────────────────────────────────────────────────
 LIVE_MODEL = "models/gemini-2.5-flash-native-audio-latest"
 DEFAULT_TELEGRAM_TRANSCRIPTION_MODEL = "models/gemini-2.5-flash"
-TELEGRAM_REPLY_AUDIO_DIR = BASE_DIR / "runtime" / "telegram" / "replies"
 ELEVENLABS_RUNTIME_ENABLED = True
 
 # ── Audio ───────────────────────────────────────────────────────────────────
@@ -628,50 +626,28 @@ class JarvisLive:
         try:
             reply = self._handle_telegram_voice_prompt(text, chat_id)
         except Exception as exc:
-            self.ui.write_debug(f"Telegram hlasová odpověď: {exc}", level="WARN")
+            self.ui.write_debug(f"Telegram odpověď na hlasový vstup: {exc}", level="WARN")
             return f"Odpověď se nepodařilo získat včas: {exc}"
 
-        reply_text = str(reply.get("text", "") or "").strip()
-        if not reply_text:
-            return "Nepodařilo se získat odpověď agenta."
+        return reply or "Nepodařilo se získat odpověď agenta."
 
-        audio_path = reply.get("audio_path")
-        if not audio_path and self._uses_elevenlabs_voice():
-            try:
-                audio_path = self._synthesize_telegram_voice_reply(reply_text)
-            except Exception as exc:
-                self.ui.write_debug(f"Telegram ElevenLabs odpověď: {exc}", level="WARN")
-
-        if not audio_path:
-            provider_label = "ElevenLabs" if self._uses_elevenlabs_voice() else "Gemini Live"
-            return (
-                f"Odpověď jsem získal, ale nepodařilo se získat hlasový výstup z {provider_label}. "
-                f"Textová odpověď: {reply_text}"
-            )
-
-        return telegram_bridge_module.TelegramBridgeReply(
-            audio_path=Path(audio_path),
-            audio_title="JARVIS odpověď",
-        )
-
-    def _handle_telegram_voice_prompt(self, text: str, chat_id: int) -> dict:
+    def _handle_telegram_voice_prompt(self, text: str, chat_id: int) -> str:
         if self._paused:
-            return {"text": "JARVIS je pozastavený.", "audio_path": None}
+            return "JARVIS je pozastavený."
         if not self._loop or not self.session:
-            return {"text": "JARVIS ještě není připojený. Zkuste to za chvíli.", "audio_path": None}
+            return "JARVIS ještě není připojený. Zkuste to za chvíli."
         future = asyncio.run_coroutine_threadsafe(
             self._ask_text_external(
                 text,
                 source="telegram_voice",
                 chat_id=chat_id,
-                want_audio=True,
             ),
             self._loop,
         )
         result = future.result(timeout=90)
         if isinstance(result, dict):
-            return result
-        return {"text": str(result or ""), "audio_path": None}
+            return str(result.get("text", "") or "")
+        return str(result or "")
 
     def _transcribe_telegram_voice(self, path: Path) -> str:
         if not path.exists():
@@ -700,61 +676,11 @@ class JarvisLive:
         )
         return str(getattr(response, "text", "") or "").strip()
 
-    def _synthesize_telegram_voice_reply(self, text: str) -> Path:
-        if not ELEVENLABS_RUNTIME_ENABLED:
-            raise RuntimeError("ElevenLabs je dočasně vypnutý.")
-        TELEGRAM_REPLY_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-        base_name = f"jarvis_reply_{uuid.uuid4().hex}"
-
-        if not elevenlabs_voice.is_configured():
-            raise RuntimeError("ElevenLabs není nakonfigurovaný pro hlasové odpovědi.")
-        return self._synthesize_telegram_reply_with_elevenlabs(text, base_name)
-
-    def _synthesize_telegram_reply_with_elevenlabs(self, text: str, base_name: str) -> Path:
-        cfg = elevenlabs_voice.load_config()
-        mp3_path = TELEGRAM_REPLY_AUDIO_DIR / f"{base_name}.mp3"
-        mp3_cfg = elevenlabs_voice.ElevenLabsVoiceConfig(
-            api_key=cfg.api_key,
-            voice_id=cfg.voice_id,
-            model_id=cfg.model_id,
-            output_format="mp3_44100_128",
-        )
-        try:
-            return elevenlabs_voice.synthesize_to_file(text, mp3_path, mp3_cfg)
-        except Exception as mp3_exc:
-            self.ui.write_debug(
-                f"Telegram MP3 syntéza přes ElevenLabs selhala, zkouším WAV fallback: {mp3_exc}",
-                level="WARN",
-            )
-
-        pcm_cfg = elevenlabs_voice.ElevenLabsVoiceConfig(
-            api_key=cfg.api_key,
-            voice_id=cfg.voice_id,
-            model_id=cfg.model_id,
-            output_format="pcm_24000",
-        )
-        pcm_audio = elevenlabs_voice.synthesize_to_bytes(text, pcm_cfg)
-        wav_path = TELEGRAM_REPLY_AUDIO_DIR / f"{base_name}.wav"
-        self._write_pcm_wav(wav_path, pcm_audio, ELEVENLABS_PCM_SAMPLE_RATE)
-        return wav_path
-
-    @staticmethod
-    def _write_pcm_wav(path: Path, pcm_audio: bytes, sample_rate: int) -> Path:
-        target = Path(path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with wave.open(str(target), "wb") as handle:
-            handle.setnchannels(CHANNELS)
-            handle.setsampwidth(pya.get_sample_size(FORMAT))
-            handle.setframerate(sample_rate)
-            handle.writeframes(pcm_audio)
-        return target
-
     async def _ask_text_external(
         self,
         text: str,
         source: str,
         chat_id: int | None = None,
-        want_audio: bool = False,
     ):
         async with self._external_text_lock:
             if not self.session:
@@ -765,8 +691,6 @@ class JarvisLive:
                 {
                     "future": reply_future,
                     "source": source,
-                    "want_audio": bool(want_audio),
-                    "audio_chunks": [],
                 }
             )
             self.ui.write_log(f"Vy ({source}): {text}")
@@ -794,26 +718,11 @@ class JarvisLive:
         future = pending.get("future")
         if not future or future.done():
             return True
-        audio_path = None
-        audio_chunks = pending.get("audio_chunks") or []
-        if pending.get("want_audio") and audio_chunks:
-            audio_path = self._write_gemini_live_wav(audio_chunks)
-        future.set_result({"text": text, "audio_path": audio_path})
+        future.set_result({"text": text})
         return True
 
-    def _capture_external_audio_chunk(self, data: bytes) -> bool:
-        if not self._pending_text_replies:
-            return False
-        pending = self._pending_text_replies[0]
-        if pending.get("want_audio"):
-            pending.setdefault("audio_chunks", []).append(data)
-        return True
-
-    def _write_gemini_live_wav(self, chunks: list[bytes]) -> Path:
-        TELEGRAM_REPLY_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-        wav_path = TELEGRAM_REPLY_AUDIO_DIR / f"jarvis_live_{uuid.uuid4().hex}.wav"
-        self._write_pcm_wav(wav_path, b"".join(chunks), RECV_SAMPLE_RATE)
-        return wav_path
+    def _capture_external_audio_chunk(self, _data: bytes) -> bool:
+        return bool(self._pending_text_replies)
 
     async def _interrupt_audio(self):
         try:

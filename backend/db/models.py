@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Identity, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -126,4 +126,63 @@ class Message(Base):
     )
     client: Mapped[Client | None] = relationship(
         back_populates="messages",
+    )
+
+
+class ShortTermMemoryTurn(Base):
+    """Provozni kratkodoby zaznam vstupu, odpovedi nebo tool vysledku."""
+
+    __tablename__ = "short_term_memory_turns"
+    __table_args__ = (
+        Index("ix_short_term_memory_session_id", "session_id", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger,
+        Identity(),
+        primary_key=True,
+    )
+    session_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+
+
+class LongTermDecision(Base):
+    """Potvrzene dlouhodobe rozhodnuti ulozene mimo provozni konverzaci."""
+
+    __tablename__ = "long_term_decisions"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger,
+        Identity(),
+        primary_key=True,
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    decision: Mapped[str] = mapped_column(Text, nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="ACCEPTED")
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    confirmed_by: Mapped[str] = mapped_column(String(128), nullable=False, default="user")
+    confirmation_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
     )

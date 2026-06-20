@@ -38,6 +38,10 @@ class BackendSettings:
     port: int
     reload: bool
     database_url: str
+    database_name: str
+    database_user: str
+    database_password: str
+    database_schema: str
     api_prefix: str = "/api/v1"
 
     @property
@@ -53,5 +57,8 @@ def load_settings() -> BackendSettings:
         port=int(os.getenv("JARVIS_BACKEND_PORT", "8000")),
         reload=_env_bool("JARVIS_BACKEND_RELOAD", default=False),
         database_url=os.getenv("DATABASE_URL", "").strip(),
+        database_name=os.getenv("DATABASE_NAME", "postgres").strip(),
+        database_user=os.getenv("DATABASE_USER", "").strip(),
+        database_password=os.getenv("DATABASE_PASS", "").strip(),
+        database_schema=os.getenv("DATABASE_SCHEMA", "").strip(),
     )
-

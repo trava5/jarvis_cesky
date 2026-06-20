@@ -45,3 +45,48 @@ class ConversationSummary(BaseModel):
 
 class ConversationDetail(ConversationSummary):
     messages: list[StoredMessage]
+
+
+class ShortTermMemoryCreate(BaseModel):
+    role: str = Field(min_length=1, max_length=32)
+    content: str = Field(min_length=1, max_length=12000)
+    session_id: str = Field(min_length=1, max_length=128)
+    metadata: dict | None = None
+
+
+class ShortTermMemoryItem(BaseModel):
+    id: int
+    session_id: str
+    role: str
+    content: str
+    metadata: dict
+    created_at: datetime
+
+
+class LongTermDecisionCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=500)
+    decision: str = Field(min_length=1, max_length=12000)
+    rationale: str = ""
+    source: str = ""
+    confirmed: bool = False
+    confirmed_by: str = Field(default="user", max_length=128)
+    confirmation_text: str = ""
+    metadata: dict | None = None
+
+
+class LongTermDecisionItem(BaseModel):
+    id: int
+    title: str
+    decision: str
+    rationale: str
+    status: str
+    source: str
+    confirmed_by: str
+    confirmation_text: str
+    metadata: dict
+    created_at: datetime
+
+
+class MemoryImportResult(BaseModel):
+    short_term_imported: int
+    long_term_imported: int

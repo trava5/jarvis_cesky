@@ -25,7 +25,7 @@ class ConversationRepository(ABC):
     """Rozhrani uloziste konverzacnich relaci."""
 
     @abstractmethod
-    def get_or_create(
+    async def get_or_create(
         self,
         conversation_id: str | None,
         channel: str,
@@ -34,7 +34,7 @@ class ConversationRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def append_message(
+    async def append_message(
         self,
         conversation_id: str,
         role: str,
@@ -46,11 +46,11 @@ class ConversationRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get(self, conversation_id: str) -> ConversationDetail | None:
+    async def get(self, conversation_id: str) -> ConversationDetail | None:
         raise NotImplementedError
 
     @abstractmethod
-    def list(self) -> list[ConversationSummary]:
+    async def list(self) -> list[ConversationSummary]:
         raise NotImplementedError
 
 
@@ -61,7 +61,7 @@ class InMemoryConversationRepository(ConversationRepository):
         self._records: dict[str, ConversationRecord] = {}
         self._lock = Lock()
 
-    def get_or_create(
+    async def get_or_create(
         self,
         conversation_id: str | None,
         channel: str,
@@ -85,7 +85,7 @@ class InMemoryConversationRepository(ConversationRepository):
             self._records[new_id] = record
             return record
 
-    def append_message(
+    async def append_message(
         self,
         conversation_id: str,
         role: str,
@@ -105,19 +105,28 @@ class InMemoryConversationRepository(ConversationRepository):
             status=status,
         )
         with self._lock:
-            record = self._records[conversation_id]
+            record = self._records.get(conversation_id)
+            if record is None:
+                record = ConversationRecord(
+                    conversation_id=conversation_id,
+                    channel=channel,
+                    client_id=client_id,
+                    created_at=now,
+                    updated_at=now,
+                )
+                self._records[conversation_id] = record
             record.messages.append(message)
             record.updated_at = now
         return message
 
-    def get(self, conversation_id: str) -> ConversationDetail | None:
+    async def get(self, conversation_id: str) -> ConversationDetail | None:
         with self._lock:
             record = self._records.get(conversation_id)
             if not record:
                 return None
             return self._to_detail(record)
 
-    def list(self) -> list[ConversationSummary]:
+    async def list(self) -> list[ConversationSummary]:
         with self._lock:
             records = sorted(
                 self._records.values(),
@@ -144,3 +153,64 @@ class InMemoryConversationRepository(ConversationRepository):
             **summary.model_dump(),
             messages=list(record.messages),
         )
+
+
+class FallbackConversationRepository(ConversationRepository):
+    """Pouzije primarni repository, pri selhani prejde na in-memory fallback."""
+
+    def __init__(
+        self,
+        primary: ConversationRepository,
+        fallback: ConversationRepository | None = None,
+    ) -> None:
+        self._primary = primary
+        self._fallback = fallback or InMemoryConversationRepository()
+        self._fallback_active = False
+        self.last_error: str | None = None
+
+    async def get_or_create(
+        self,
+        conversation_id: str | None,
+        channel: str,
+        client_id: str | None,
+    ) -> ConversationRecord:
+        return await self._call(
+            "get_or_create",
+            conversation_id,
+            channel,
+            client_id,
+        )
+
+    async def append_message(
+        self,
+        conversation_id: str,
+        role: str,
+        text: str,
+        channel: str,
+        client_id: str | None,
+        status: str | None = None,
+    ) -> StoredMessage:
+        return await self._call(
+            "append_message",
+            conversation_id,
+            role,
+            text,
+            channel,
+            client_id,
+            status,
+        )
+
+    async def get(self, conversation_id: str) -> ConversationDetail | None:
+        return await self._call("get", conversation_id)
+
+    async def list(self) -> list[ConversationSummary]:
+        return await self._call("list")
+
+    async def _call(self, method_name: str, *args):
+        target = self._fallback if self._fallback_active else self._primary
+        try:
+            return await getattr(target, method_name)(*args)
+        except Exception as exc:
+            self._fallback_active = True
+            self.last_error = str(exc)
+            return await getattr(self._fallback, method_name)(*args)

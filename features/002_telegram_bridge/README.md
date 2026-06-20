@@ -35,16 +35,11 @@ Aktuální verze podporuje:
 - přijetí hlasové zprávy, stažení souboru do `runtime/telegram`,
 - přepis Telegram OGG/Opus audia přes Gemini a předání textu do stejného
   agentního runtime jako běžnou textovou zprávu,
-- odpověď podle typu vstupu: textový dotaz vrací text, hlasový dotaz se přepíše
-  do textu a odpověď agenta se odešle jako audio podle aktivního hlasového
-  provideru desktopové aplikace,
-- Telegram odpověď z externího dotazu se nepřehrává lokálně na desktopové stanici.
+- textovou odpověď pro textové i hlasové Telegram dotazy.
 
-Při aktivním Gemini Live provideru se audio chunky odpovědi uloží do WAV souboru a
-odešlou do Telegramu stejným Gemini hlasem, který používá desktop. Při aktivním
-ElevenLabs provideru bridge používá ElevenLabs MP3 a případně ElevenLabs PCM/WAV
-fallback. Lokální Windows TTS fallback je odpojený, protože neodpovídal zvolenému
-hlasu asistenta.
+Telegram bridge neodesílá hlasové ani audio odpovědi. Aktivní hlasový provider
+desktopové aplikace neovlivňuje Telegram výstup; hlasová zpráva z Telegramu se
+jen přepíše do textu a odpověď agenta se odešle jako běžná textová zpráva.
 
 Další architektonický krok má oddělit explicitní agentní runtime rozhraní, které
 budou sdílet Desktop UI, Telegram a případní další klienti.

@@ -26,12 +26,12 @@ class AgentRuntime:
         return self._state
 
     async def handle_message(self, request: MessageRequest) -> MessageResponse:
-        conversation = self._conversations.get_or_create(
+        conversation = await self._conversations.get_or_create(
             conversation_id=request.conversation_id,
             channel=request.channel,
             client_id=request.client_id,
         )
-        user_message = self._conversations.append_message(
+        user_message = await self._conversations.append_message(
             conversation_id=conversation.conversation_id,
             role="user",
             text=request.text,
@@ -45,7 +45,7 @@ class AgentRuntime:
                 "Backend zpravu prijal, ale zivy agentni runtime je zatim "
                 "spusteny jen v desktopove aplikaci."
             )
-            self._conversations.append_message(
+            await self._conversations.append_message(
                 conversation_id=conversation.conversation_id,
                 role="assistant",
                 text=text,
@@ -62,7 +62,7 @@ class AgentRuntime:
             )
 
         text = "Agentni runtime rozhrani je pripravene, implementace odpovedi jeste chybi."
-        self._conversations.append_message(
+        await self._conversations.append_message(
             conversation_id=conversation.conversation_id,
             role="assistant",
             text=text,

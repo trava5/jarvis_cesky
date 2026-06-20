@@ -1,6 +1,6 @@
 # Plán české lokalizace
 
-Aktualizováno: 2026-06-19
+Aktualizováno: 2026-06-20
 
 ## Přehled
 
@@ -35,6 +35,9 @@ Aktualizováno: 2026-06-19
 | ARCH-007 | Sdílený model konverzační relace v backendu | DONE |
 | ARCH-008 | Repository rozhraní pro konverzační persistenci | DONE |
 | ARCH-009 | SQLAlchemy 2.0 modely pro konverzační data | DONE |
+| ARCH-010 | PostgreSQL repository pro konverzační data | DONE |
+| ARCH-011 | Backend storage pro krátkodobou paměť a dlouhodobá rozhodnutí | DONE |
+| DOC-001 | Uložení stavu projektu a konverzace před restartem | DONE |
 | FEAT-001 | Feature hlasového provideru ElevenLabs | DONE |
 | UI-001 | Dashboardový přepínač hlasu | DONE |
 | UI-002 | Oprava přepínání hlasu za běhu | DONE |
@@ -53,6 +56,7 @@ Aktualizováno: 2026-06-19
 | FEAT-011 | Oprava Telegram hlasových odpovědí přes ElevenLabs | DONE |
 | FEAT-012 | Windows TTS fallback pro Telegram hlasové odpovědi | DONE |
 | FEAT-013 | Gemini Live hlas pro Telegram odpovědi | DONE |
+| FEAT-014 | Telegram pouze s textovými odpověďmi | DONE |
 | SEC-001 | Přesun citlivé konfigurace do `.env` | DONE |
 
 ## L10N-001 — Jádro a prompt
@@ -380,6 +384,41 @@ Stav: `DONE`
 - [x] Ověřit syntaxi a kompilaci SQLAlchemy metadata.
 - [x] Zapsat výsledek do historie.
 
+## DOC-001 — Uložení stavu projektu a konverzace před restartem
+
+Stav: `DONE`
+
+- [x] Zapsat aktuální stav projektu do `docs/PROJECT_STATE.md`.
+- [x] Zapsat aktuální stav pracovní konverzace do `docs/CONVERSATION_STATE.md`.
+- [x] Nezapisovat žádné tokeny, API klíče ani connection stringy z `.env`.
+- [x] Uvést další doporučený krok po restartu.
+- [x] Zapsat výsledek do historie.
+
+## ARCH-010 — PostgreSQL repository pro konverzační data
+
+Stav: `DONE`
+
+- [x] Přidat PostgreSQL implementaci `ConversationRepository`.
+- [x] Přidat inicializaci databázového schématu pro vývojový běh.
+- [x] Přepnout repository factory na PostgreSQL při nastaveném `DATABASE_URL`.
+- [x] Zachovat in-memory fallback bez databáze.
+- [x] Ověřit fallback režim bez databáze.
+- [x] Ověřit bezpečný fallback při nedostupné nebo chybně autentizované databázi.
+- [x] Ověřit testovací připojení k PostgreSQL přes hodnoty z `.env`.
+- [x] Ověřit reálný PostgreSQL zápis s platným databázovým přihlášením.
+- [x] Aktualizovat migrační plán, backend dokumentaci a historii.
+
+## ARCH-011 — Backend storage pro krátkodobou paměť a dlouhodobá rozhodnutí
+
+Stav: `DONE`
+
+- [x] Přidat PostgreSQL modely pro krátkodobé turny a dlouhodobá rozhodnutí.
+- [x] Přidat repository rozhraní, in-memory fallback a PostgreSQL implementaci.
+- [x] Přidat backend API endpointy pro krátkodobou paměť a dlouhodobá rozhodnutí.
+- [x] Přidat idempotentní import současných SQLite záznamů.
+- [x] Ověřit PostgreSQL zápis, čtení, vyhledávání a import bez zveřejnění hodnot z `.env`.
+- [x] Aktualizovat migrační plán, backend dokumentaci a historii.
+
 ## FEAT-001 — ElevenLabs hlasový provider
 
 Stav: `DONE`
@@ -578,6 +617,18 @@ Stav: `DONE`
 - [x] Zabránit lokálnímu přehrání audio odpovědi určené pro Telegram.
 - [x] Aktualizovat dokumentaci Telegram bridge.
 - [x] Ověřit syntaxi a bezpečné smoke testy bez externího API volání.
+- [x] Zapsat výsledek do historie.
+
+## FEAT-014 — Telegram pouze s textovými odpověďmi
+
+Stav: `DONE`
+
+- [x] Zachovat příjem textových Telegram zpráv.
+- [x] Zachovat příjem a přepis hlasových Telegram zpráv.
+- [x] Odstranit odesílání audio odpovědí přes Telegram.
+- [x] Odstranit Telegram TTS / audio reply větve z `main.py`.
+- [x] Aktualizovat dokumentaci Telegram feature.
+- [x] Ověřit syntaxi a smoke test bez externího Telegram API volání.
 - [x] Zapsat výsledek do historie.
 
 ## SEC-001 — Citlivá konfigurace v `.env`

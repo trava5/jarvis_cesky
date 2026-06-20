@@ -35,6 +35,8 @@
 | Short-term memory | Krátkodobá paměť |
 | Long-term memory | Dlouhodobá paměť |
 | Long-term decision | Dlouhodobé rozhodnutí |
+| Memory repository | Repository paměti |
+| SQLite import | SQLite import |
 | Tool catalog | Katalog nástrojů |
 | Tool description | Popis nástroje |
 | Feature | Běhová vlastnost |
@@ -56,6 +58,8 @@
 | API endpoint | API endpoint / koncový bod API |
 | Health endpoint | Health endpoint / endpoint stavu |
 | PostgreSQL database | PostgreSQL databáze |
+| Database schema | Databázové schéma |
+| Database name | Název databáze |
 
 Konkrétní volba mezi variantami závisí na prostoru v UI. V hlasových odpovědích
 preferuj přirozenou větu, v krátkých štítcích stručnější variantu.
