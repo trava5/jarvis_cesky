@@ -452,3 +452,37 @@ function calling.
   runtime, ne vlastní paralelní implementaci agenta.
 - Pokud klient zároveň zpřístupní modelu nový nástroj, tato volatelná část musí
   být samostatně v `actions` a musí mít záznam v `actions/tool_catalog.py`.
+
+## ADR-016 — Serverový backend pro mobilní a víceklientskou architekturu
+
+Datum: 2026-06-19
+Stav: `ACCEPTED`
+
+### Kontext
+
+Současná aplikace vznikla jako desktopový Windows runtime s UI, hlasovým vstupem,
+Telegram bridge, actions a pamětí napojenými převážně přes `main.py`. Pro budoucí
+mobilní klienty, například Flutter aplikaci, webové rozhraní a více paralelních
+komunikačních kanálů je potřeba explicitní serverová vrstva, která nebude závislá
+na desktopovém okně.
+
+### Rozhodnutí
+
+Projekt se bude postupně migrovat na architekturu se serverovým backendem nad
+FastAPI spuštěným přes Uvicorn. Backend bude poskytovat HTTP/WebSocket API pro
+klienty a bude cílovým místem pro sdílený agentní runtime, správu konverzací,
+stav klientů a persistenci. PostgreSQL bude cílová relační databáze pro sdílená
+runtime data. Stávající lokální SQLite paměť zůstává kompatibilní přechodová
+vrstva, dokud nebude bezpečně migrována.
+
+### Důsledky
+
+- Nový serverový kód patří do samostatného balíčku `backend`, ne do `main.py`.
+- Desktop UI, Telegram bridge a budoucí Flutter klient mají směřovat k API nad
+  backendem, ne k vlastní kopii agentní logiky.
+- První migrační kroky nesmí rozbít současný desktopový běh; backend se zavádí
+  paralelně a postupně přebírá odpovědnost.
+- PostgreSQL konfigurace patří do `.env`; skutečné connection stringy se nesmí
+  zapisovat do dokumentace ani verzovaných souborů.
+- API endpointy mají používat stabilní verzi v cestě, například `/api/v1/...`,
+  aby budoucí mobilní klienti nebyli vázaní na interní refaktoring.

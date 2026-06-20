@@ -22,8 +22,8 @@ napojení Telegramu, webu a mobilního frontendu, například Flutter aplikace.
 | ID | Název | Stav | Výsledek |
 |---|---|---|---|
 | MIG-001 | Agentní runtime kontrakt | DONE | Backend přijímá textovou zprávu přes `/api/v1/messages` a vrací stabilní odpověďový model. |
-| MIG-002 | Sdílená konverzační relace | TODO | Zavedení `conversation_id`, `client_id`, `channel` a jednotného modelu zpráv. |
-| MIG-003 | PostgreSQL persistence | TODO | Tabulky pro klienty, konverzace, zprávy, krátkodobou paměť a dlouhodobá rozhodnutí. |
+| MIG-002 | Sdílená konverzační relace | DONE | Zavedení `conversation_id`, `client_id`, `channel` a jednotného modelu zpráv. |
+| MIG-003 | PostgreSQL persistence | IN PROGRESS | Tabulky pro klienty, konverzace, zprávy, krátkodobou paměť a dlouhodobá rozhodnutí. |
 | MIG-004 | Migrace paměti | TODO | Přesun současné paměti z lokální SQLite vrstvy do backend storage vrstvy. |
 | MIG-005 | Telegram přes backend | TODO | Telegram bridge přestane volat desktopový runtime přímo a použije backend službu. |
 | MIG-006 | Desktop přes backend | TODO | Dashboard se stane klientem backendu a `main.py` se ztenčí na UI/audio bootstrap. |
@@ -77,3 +77,48 @@ Backend vrátí:
 
 Stav `runtime_unavailable` je přechodový. Znamená, že API kontrakt funguje, ale
 živý agentní runtime zatím běží v desktopové aplikaci a není připojený k backendu.
+
+## MIG-002 — Sdílená konverzační relace
+
+Stav: `DONE`
+
+Tento krok zavádí jednotný model konverzační relace pro backend klienty. Relace je
+zatím uložená pouze v paměti procesu, protože trvalá PostgreSQL persistence patří
+do navazujícího kroku `MIG-003`.
+
+Kontrolní body:
+
+- [x] Přidat `ConversationSummary`, `ConversationDetail` a `StoredMessage`.
+- [x] Přidat dočasné in-memory úložiště `ConversationStore`.
+- [x] Při `POST /api/v1/messages` založit nebo najít relaci podle
+  `conversation_id`.
+- [x] Ukládat uživatelský turn a přechodovou odpověď asistenta do relace.
+- [x] Přidat `GET /api/v1/conversations`.
+- [x] Přidat `GET /api/v1/conversations/{conversation_id}`.
+- [x] Ověřit API smoke testem.
+
+Známé omezení:
+
+- Relace se po restartu backendu ztratí. Trvalé uložení do PostgreSQL bude řešit
+  `MIG-003`.
+
+## MIG-003 — PostgreSQL persistence
+
+Stav: `IN PROGRESS`
+
+Tento krok nahrazuje přímou závislost API na in-memory úložišti repository
+rozhraním a následně přidá PostgreSQL implementaci. První podkrok je hotový:
+endpointy už používají `ConversationRepository`, takže databázovou implementaci
+půjde zapojit bez změny API kontraktu.
+
+Kontrolní body:
+
+- [x] Oddělit `ConversationRepository` rozhraní od in-memory implementace.
+- [x] Přejmenovat dočasné úložiště na `InMemoryConversationRepository`.
+- [x] Přidat factory pro volbu conversation repository.
+- [x] Zachovat funkční API endpointy nad in-memory fallbackem.
+- [x] Přidat SQLAlchemy modely pro `clients`, `conversations` a `messages`.
+- [ ] Přidat PostgreSQL implementaci repository.
+- [ ] Přidat inicializaci databázového schématu.
+- [ ] Přepnout repository factory na PostgreSQL při nastaveném `DATABASE_URL`.
+- [ ] Ověřit fallback bez databáze a PostgreSQL režim s databází.

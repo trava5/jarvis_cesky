@@ -50,6 +50,12 @@
 | Agent backend | Agentní backend |
 | Agent runtime | Agentní runtime |
 | Specialized agent | Specializovaný agent |
+| Server backend | Serverový backend / serverová vrstva |
+| Mobile client | Mobilní klient |
+| Frontend | Frontend / klientské rozhraní |
+| API endpoint | API endpoint / koncový bod API |
+| Health endpoint | Health endpoint / endpoint stavu |
+| PostgreSQL database | PostgreSQL databáze |
 
 Konkrétní volba mezi variantami závisí na prostoru v UI. V hlasových odpovědích
 preferuj přirozenou větu, v krátkých štítcích stručnější variantu.

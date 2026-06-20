@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from uuid import uuid4
 
 from backend.schemas import MessageRequest, MessageResponse
+from backend.services.conversations import ConversationRepository
 
 
 @dataclass(frozen=True)
@@ -17,34 +17,63 @@ class RuntimeState:
 class AgentRuntime:
     """Prvni backendova mezivrstva pro budouci sdileny agentni runtime."""
 
-    def __init__(self) -> None:
+    def __init__(self, conversations: ConversationRepository) -> None:
         self._state = RuntimeState()
+        self._conversations = conversations
 
     @property
     def state(self) -> RuntimeState:
         return self._state
 
     async def handle_message(self, request: MessageRequest) -> MessageResponse:
-        conversation_id = request.conversation_id or f"conv_{uuid4().hex}"
-        message_id = f"msg_{uuid4().hex}"
+        conversation = self._conversations.get_or_create(
+            conversation_id=request.conversation_id,
+            channel=request.channel,
+            client_id=request.client_id,
+        )
+        user_message = self._conversations.append_message(
+            conversation_id=conversation.conversation_id,
+            role="user",
+            text=request.text,
+            channel=request.channel,
+            client_id=request.client_id,
+            status="received",
+        )
 
         if not self._state.connected:
+            text = (
+                "Backend zpravu prijal, ale zivy agentni runtime je zatim "
+                "spusteny jen v desktopove aplikaci."
+            )
+            self._conversations.append_message(
+                conversation_id=conversation.conversation_id,
+                role="assistant",
+                text=text,
+                channel=request.channel,
+                client_id=request.client_id,
+                status="runtime_unavailable",
+            )
             return MessageResponse(
                 status="runtime_unavailable",
-                message_id=message_id,
-                conversation_id=conversation_id,
-                text=(
-                    "Backend zpravu prijal, ale zivy agentni runtime je zatim "
-                    "spusteny jen v desktopove aplikaci."
-                ),
+                message_id=user_message.message_id,
+                conversation_id=conversation.conversation_id,
+                text=text,
                 detail=self._state.detail,
             )
 
+        text = "Agentni runtime rozhrani je pripravene, implementace odpovedi jeste chybi."
+        self._conversations.append_message(
+            conversation_id=conversation.conversation_id,
+            role="assistant",
+            text=text,
+            channel=request.channel,
+            client_id=request.client_id,
+            status="not_implemented",
+        )
         return MessageResponse(
             status="not_implemented",
-            message_id=message_id,
-            conversation_id=conversation_id,
-            text="Agentni runtime rozhrani je pripravene, implementace odpovedi jeste chybi.",
+            message_id=user_message.message_id,
+            conversation_id=conversation.conversation_id,
+            text=text,
             detail="Tento stav bude nahrazen napojenim na sdileny agentni runtime.",
         )
-

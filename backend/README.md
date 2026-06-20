@@ -24,6 +24,8 @@ Vychozi adresa je `http://127.0.0.1:8000`.
 - `POST /api/v1/messages` prijima prvni stabilni agentni message kontrakt. Zatim
   vraci `runtime_unavailable`, protoze zivy agentni runtime jeste bezi v desktopove
   aplikaci.
+- `GET /api/v1/conversations` vraci seznam konverzacnich relaci v pameti procesu.
+- `GET /api/v1/conversations/{conversation_id}` vraci detail relace vcetne zprav.
 
 Priklad zpravy:
 
@@ -36,6 +38,19 @@ Priklad zpravy:
   "want_audio": false
 }
 ```
+
+Konverzacni relace jsou v tomto kroku pouze docasne in-memory uloziste. Po
+restartu backendu se ztrati. Trvale ulozeni do PostgreSQL je dalsi migracni krok.
+
+API uz nepouziva konkretni in-memory uloziste primo. Konverzace jdou pres
+`ConversationRepository` a factory `create_conversation_repository`. PostgreSQL
+implementace se doplni jako dalsi cast `MIG-003`; do te doby factory vraci
+in-memory fallback.
+
+Databazove schéma pro PostgreSQL uz ma SQLAlchemy 2.0 modely v `backend/db`.
+Modely `Client`, `Conversation` a `Message` pripravuji tabulky `clients`,
+`conversations` a `messages`, vcetne zakladnich vazeb, indexu a timestampu.
+Repository je zatim na tyto modely jeste nepripojena.
 
 ## Konfigurace
 

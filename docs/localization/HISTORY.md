@@ -1360,3 +1360,169 @@ Známá omezení:
   automaticky, protože vyžaduje síťové volání a skutečný bot token.
 - Gemini Live hlas pro Telegram je dostupný při aktivním Gemini provideru. Pokud
   je desktop přepnutý na ElevenLabs, Telegram použije ElevenLabs syntézu.
+
+## 2026-06-19 — ARCH-005 — Základ serverové architektury FastAPI/PostgreSQL
+
+Stav: `DONE`
+
+Provedeno:
+
+- Do `DECISIONS.md` bylo přidáno `ADR-016` pro postupnou migraci na serverový
+  backend FastAPI, Uvicorn a PostgreSQL.
+- Založen balíček `backend` oddělený od současné desktop aplikace.
+- Přidána FastAPI aplikace s verzovaným prefixem `/api/v1`.
+- Přidány endpointy `GET /api/v1/health`, `GET /api/v1/status` a připravený
+  `POST /api/v1/messages`.
+- Přidána konfigurační vrstva pro backend host, port, reload režim a
+  `DATABASE_URL`.
+- Přidána lazy PostgreSQL health kontrola přes SQLAlchemy async engine a
+  `asyncpg`, která bezpečně hlásí i stav bez nastavené databáze.
+- `.env.example`, `requirements.txt`, `backend/README.md` a slovník lokalizace
+  byly aktualizované pro nový backend.
+- Nové backend závislosti byly nainstalované do projektového `.venv`.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile backend\__init__.py backend\config.py backend\database.py backend\api.py backend\app.py backend\__main__.py`
+- Import test potvrdil dostupnost `fastapi`, `uvicorn`, `sqlalchemy` a `asyncpg`.
+- Smoke test přes `fastapi.testclient.TestClient` ověřil `/api/v1/health`,
+  `/api/v1/status` a `/api/v1/messages`.
+- Prošel jsem `docs/localization/CHECKLIST.md`.
+
+Známá omezení:
+
+- Agentní runtime zatím zůstává v `main.py`; endpoint `POST /api/v1/messages`
+  vrací `not_implemented`.
+- PostgreSQL není v lokálním `.env` zatím nastavené, takže `/api/v1/status`
+  pouze hlásí, že `DATABASE_URL` chybí.
+- Backend zatím není automaticky spouštěný společně s desktopovou aplikací.
+
+## 2026-06-19 — ARCH-006 — Migrační plán a první agentní runtime kontrakt
+
+Stav: `DONE`
+
+Provedeno:
+
+- Byl založen samostatný migrační plán `docs/MIGRATION_PLAN.md`.
+- Plán popisuje fáze `MIG-001` až `MIG-009` pro agentní kontrakt, konverzační
+  relace, PostgreSQL persistenci, migraci paměti, Telegram přes backend, desktop
+  přes backend, WebSocket API, mobilní API kontrakt a autentizaci.
+- Přidány Pydantic modely `MessageRequest` a `MessageResponse` v
+  `backend/schemas.py`.
+- Přidána služba `backend/services/agent_runtime.py` jako první mezivrstva mezi
+  HTTP API a budoucím sdíleným agentním runtime.
+- `POST /api/v1/messages` byl napojený na `AgentRuntime` a vrací stabilní
+  odpověďový model se stavem `runtime_unavailable`.
+- `GET /api/v1/status` nově vrací i stav `agent_runtime`.
+- `backend/README.md` byl aktualizovaný o message kontrakt.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile backend\__init__.py backend\config.py backend\database.py backend\schemas.py backend\api.py backend\app.py backend\__main__.py backend\services\__init__.py backend\services\agent_runtime.py`
+- API smoke test přes `fastapi.testclient.TestClient` ověřil validní payload pro
+  `POST /api/v1/messages`, stav `runtime_unavailable`, generování `message_id` a
+  `conversation_id` a stav `agent_runtime` v `/api/v1/status`.
+- Prošel jsem `docs/localization/CHECKLIST.md`.
+
+Známá omezení:
+
+- `AgentRuntime` zatím nevolá živou Gemini session ani actions; funguje jako
+  stabilní backend kontrakt pro další migrační krok.
+- Migrační plán byl nově založen jako `docs/MIGRATION_PLAN.md`; nepřejmenovával se
+  existující soubor, protože samostatný migrační plán v repozitáři dosud nebyl.
+
+## 2026-06-19 — ARCH-007 — Sdílený model konverzační relace v backendu
+
+Stav: `DONE`
+
+Provedeno:
+
+- Přidány backend modely `StoredMessage`, `ConversationSummary` a
+  `ConversationDetail`.
+- Přidáno dočasné in-memory úložiště `ConversationStore` pro konverzační relace.
+- `AgentRuntime` při `POST /api/v1/messages` zakládá nebo načítá relaci podle
+  `conversation_id`, ukládá turn uživatele a přechodovou odpověď asistenta.
+- Přidány endpointy `GET /api/v1/conversations` a
+  `GET /api/v1/conversations/{conversation_id}`.
+- `docs/MIGRATION_PLAN.md` označuje `MIG-002` jako dokončený a popisuje omezení
+  in-memory úložiště.
+- `backend/README.md` byl aktualizovaný o endpointy relací.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile backend\schemas.py backend\api.py backend\services\agent_runtime.py backend\services\conversations.py`
+- API smoke test přes `fastapi.testclient.TestClient` ověřil vytvoření relace,
+  seznam relací, detail relace, uložené role `user` a `assistant` i 404 pro
+  neexistující relaci.
+- Prošel jsem `docs/localization/CHECKLIST.md`.
+
+Známá omezení:
+
+- Konverzační relace jsou zatím uložené pouze v paměti procesu a po restartu
+  backendu se ztratí.
+- Trvalé uložení do PostgreSQL patří do navazujícího kroku `MIG-003`.
+
+## 2026-06-19 — ARCH-008 — Repository rozhraní pro konverzační persistenci
+
+Stav: `DONE`
+
+Provedeno:
+
+- `ConversationStore` byl rozdělený na abstraktní `ConversationRepository` a
+  konkrétní `InMemoryConversationRepository`.
+- `AgentRuntime` nyní závisí na repository rozhraní, ne na konkrétní in-memory
+  implementaci.
+- Přidána factory `backend/storage.py` pro vytváření conversation repository.
+- API dál používá in-memory fallback, ale už přes factory, takže PostgreSQL
+  implementaci půjde zapojit bez změny endpointů.
+- `docs/MIGRATION_PLAN.md` označuje `MIG-003` jako `IN PROGRESS` a má hotové
+  kontrolní body pro repository kontrakt.
+- `backend/README.md` popisuje aktuální repository fallback.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile backend\api.py backend\storage.py backend\services\agent_runtime.py backend\services\conversations.py`
+- API smoke test přes `fastapi.testclient.TestClient` ověřil, že vytvoření zprávy,
+  seznam relací a detail relace dál fungují nad repository factory.
+- Prošel jsem `docs/localization/CHECKLIST.md`.
+
+Známá omezení:
+
+- PostgreSQL repository zatím není implementované; factory vždy vrací in-memory
+  fallback.
+- Relace se stále ztratí po restartu backendu, dokud nebude dokončená další část
+  `MIG-003`.
+
+## 2026-06-19 — ARCH-009 — SQLAlchemy 2.0 modely pro konverzační data
+
+Stav: `DONE`
+
+Provedeno:
+
+- Přidán balíček `backend/db` se SQLAlchemy 2.0 declarative base.
+- Přidány ORM modely `Client`, `Conversation` a `Message` pro tabulky `clients`,
+  `conversations` a `messages`.
+- Doplněny vazby mezi klienty, konverzacemi a zprávami, mazání zpráv při smazání
+  konverzace, základní indexy a timestamp sloupce.
+- Sloupec databázové tabulky `messages.metadata` je v Pythonu mapovaný jako
+  `metadata_json`, protože `metadata` je rezervovaný atribut SQLAlchemy modelu.
+- `docs/MIGRATION_PLAN.md` označuje hotový kontrolní bod pro SQLAlchemy modely v
+  rámci `MIG-003`.
+- `backend/README.md` popisuje aktuální stav databázových modelů.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile backend\db\__init__.py backend\db\base.py backend\db\models.py`
+- Import SQLAlchemy metadata ověřil tabulky `clients`, `conversations` a
+  `messages`.
+- Kompilace `CreateTable` přes PostgreSQL dialect proběhla bez chyby.
+- API smoke test přes `fastapi.testclient.TestClient` ověřil, že vytvoření zprávy,
+  seznam relací a detail relace dál fungují nad in-memory fallbackem.
+- Prošel jsem `docs/localization/CHECKLIST.md`.
+
+Známé omezení:
+
+- PostgreSQL repository zatím není napojené na tyto modely; backend dál používá
+  in-memory fallback přes `ConversationRepository`.
+- Inicializace databázového schématu a přepnutí factory podle `DATABASE_URL`
+  zůstává v dalších kontrolních bodech `MIG-003`.

@@ -30,6 +30,11 @@ Aktualizováno: 2026-06-19
 | ARCH-002 | Číslované podadresáře pro actions a features | DONE |
 | ARCH-003 | Architektura sdíleného základu a specializovaných profilů | DONE |
 | ARCH-004 | Telegram jako klientský kanál nad backendem agenta | DONE |
+| ARCH-005 | Základ serverové architektury FastAPI/PostgreSQL | DONE |
+| ARCH-006 | Migrační plán a první agentní runtime kontrakt | DONE |
+| ARCH-007 | Sdílený model konverzační relace v backendu | DONE |
+| ARCH-008 | Repository rozhraní pro konverzační persistenci | DONE |
+| ARCH-009 | SQLAlchemy 2.0 modely pro konverzační data | DONE |
 | FEAT-001 | Feature hlasového provideru ElevenLabs | DONE |
 | UI-001 | Dashboardový přepínač hlasu | DONE |
 | UI-002 | Oprava přepínání hlasu za běhu | DONE |
@@ -315,6 +320,64 @@ Stav: `DONE`
 - [x] Zapsat rozhodnutí, že Telegram bridge není dashboardový přepisovač, ale samostatný klientský kanál k backendu agenta.
 - [x] Zapsat pravidlo, že Desktop UI, Telegram a budoucí klienti mají sdílet stejný agentní runtime.
 - [x] Aktualizovat dokumentaci Telegram feature podle tohoto pravidla.
+- [x] Zapsat výsledek do historie.
+
+## ARCH-005 — Základ serverové architektury FastAPI/PostgreSQL
+
+Stav: `DONE`
+
+- [x] Zapsat architektonické rozhodnutí pro backend FastAPI, Uvicorn a PostgreSQL.
+- [x] Založit backend balíček oddělený od současné desktop aplikace.
+- [x] Přidat základní health/status endpointy pro budoucí mobilní frontend.
+- [x] Připravit konfigurační proměnné pro server a PostgreSQL.
+- [x] Aktualizovat závislosti a dokumentaci spuštění backendu.
+- [x] Ověřit syntaxi nových backend modulů.
+- [x] Zapsat výsledek do historie.
+
+## ARCH-006 — Migrační plán a první agentní runtime kontrakt
+
+Stav: `DONE`
+
+- [x] Založit `docs/MIGRATION_PLAN.md` jako samostatný plán migrace.
+- [x] Popsat fáze migrace backendu, PostgreSQL a mobilních klientů.
+- [x] Přidat backend službu pro první agentní runtime kontrakt.
+- [x] Napojit `POST /api/v1/messages` na agentní runtime službu.
+- [x] Aktualizovat dokumentaci backendu.
+- [x] Ověřit syntaxi a API smoke testy.
+- [x] Zapsat výsledek do historie.
+
+## ARCH-007 — Sdílený model konverzační relace v backendu
+
+Stav: `DONE`
+
+- [x] Přidat backend modely pro relaci a uloženou zprávu.
+- [x] Přidat dočasné in-memory úložiště relací pro fázi před PostgreSQL.
+- [x] Napojit `POST /api/v1/messages` na relace podle `conversation_id`, `client_id` a `channel`.
+- [x] Přidat endpoint pro načtení konverzační relace.
+- [x] Aktualizovat `docs/MIGRATION_PLAN.md` a `backend/README.md`.
+- [x] Ověřit syntaxi a API smoke testy.
+- [x] Zapsat výsledek do historie.
+
+## ARCH-008 — Repository rozhraní pro konverzační persistenci
+
+Stav: `DONE`
+
+- [x] Oddělit repository rozhraní od in-memory implementace konverzací.
+- [x] Přidat factory pro volbu conversation repository.
+- [x] Zachovat in-memory fallback bez `DATABASE_URL`.
+- [x] Aktualizovat `docs/MIGRATION_PLAN.md` a backend dokumentaci.
+- [x] Ověřit syntaxi a API smoke testy.
+- [x] Zapsat výsledek do historie.
+
+## ARCH-009 — SQLAlchemy 2.0 modely pro konverzační data
+
+Stav: `DONE`
+
+- [x] Přidat SQLAlchemy 2.0 declarative base pro backend databázovou vrstvu.
+- [x] Přidat ORM modely `Client`, `Conversation` a `Message`.
+- [x] Definovat vazby, indexy a timestamp sloupce pro PostgreSQL persistenci.
+- [x] Aktualizovat `docs/MIGRATION_PLAN.md` a backend dokumentaci.
+- [x] Ověřit syntaxi a kompilaci SQLAlchemy metadata.
 - [x] Zapsat výsledek do historie.
 
 ## FEAT-001 — ElevenLabs hlasový provider

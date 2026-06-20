@@ -11,3 +11,7 @@ requests
 pyperclip
 mss
 tzdata
+fastapi
+uvicorn
+sqlalchemy
+asyncpg

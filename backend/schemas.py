@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -21,3 +23,25 @@ class MessageResponse(BaseModel):
     audio_url: str | None = None
     detail: str | None = None
 
+
+class StoredMessage(BaseModel):
+    message_id: str
+    role: str
+    text: str
+    channel: str
+    client_id: str | None = None
+    created_at: datetime
+    status: str | None = None
+
+
+class ConversationSummary(BaseModel):
+    conversation_id: str
+    client_id: str | None = None
+    channel: str
+    created_at: datetime
+    updated_at: datetime
+    message_count: int
+
+
+class ConversationDetail(ConversationSummary):
+    messages: list[StoredMessage]
