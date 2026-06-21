@@ -25,9 +25,9 @@ napojení Telegramu, webu a mobilního frontendu, například Flutter aplikace.
 | MIG-002 | Sdílená konverzační relace | DONE | Zavedení `conversation_id`, `client_id`, `channel` a jednotného modelu zpráv. |
 | MIG-003 | PostgreSQL persistence | DONE | PostgreSQL repository a tabulky pro klienty, konverzace a zprávy. |
 | MIG-004 | Migrace paměti | DONE | Krátkodobá paměť a dlouhodobá rozhodnutí jsou dostupná v backend storage vrstvě. |
-| MIG-005 | Telegram přes backend | IN PROGRESS | Příprava: Telegram přijímá text i hlas, ale odpovídá už jen textem; backend napojení zůstává navazující část. |
-| MIG-006 | Desktop přes backend | TODO | Dashboard se stane klientem backendu a `main.py` se ztenčí na UI/audio bootstrap. |
-| MIG-007 | Realtime WebSocket API | TODO | Stream stavu, textu, audia a událostí pro desktop, Telegram a mobilní klienty. |
+| MIG-005 | Telegram přes backend | DONE | Telegram volá backend API jako první cestu; embedded backend s live handlerem vrací skutečnou odpověď agenta a fallback zůstává bezpečnostní záloha. |
+| MIG-006 | Desktop přes backend | IN PROGRESS | Desktopový textový vstup volá backend API jako první cestu; audio/mikrofon zatím zůstává v `main.py`. |
+| MIG-007 | Realtime WebSocket API | IN PROGRESS | Desktop text je realtime-first přes WebSocket eventy; audio stream je připravený jen v modelu události. |
 | MIG-008 | Mobilní API kontrakt | TODO | Stabilní OpenAPI kontrakt pro Flutter klienta. |
 | MIG-009 | Autentizace klientů | TODO | API tokeny nebo přihlášení klientů, oddělené od Telegram allowlistu. |
 
@@ -162,7 +162,7 @@ Poznámka:
 
 ## MIG-005 — Telegram přes backend
 
-Stav: `IN PROGRESS`
+Stav: `DONE`
 
 Tento krok postupně převádí Telegram bridge z přímého napojení na desktopový
 runtime na klienta backendového API. První přípravná část sjednocuje výstup
@@ -174,13 +174,97 @@ Kontrolní body:
 - [x] Zachovat příjem textových Telegram zpráv.
 - [x] Zachovat příjem hlasových Telegram zpráv a jejich přepis do textu.
 - [x] Odstranit odesílání hlasových/audio odpovědí přes Telegram.
-- [ ] Přidat backend klienta nebo adapter pro volání `/api/v1/messages`.
-- [ ] Přesměrovat Telegram textový vstup přes backend při zachování bezpečného
+- [x] Přidat backend klienta nebo adapter pro volání `/api/v1/messages`.
+- [x] Přesměrovat Telegram textový vstup přes backend při zachování bezpečného
   desktopového fallbacku.
-- [ ] Přesměrovat přepsaný Telegram hlasový vstup přes stejnou backend cestu.
-- [ ] Ověřit konverzační relace, klientské ID a chování při nedostupném backendu.
+- [x] Přesměrovat přepsaný Telegram hlasový vstup přes stejnou backend cestu.
+- [x] Ověřit konverzační relace, klientské ID a chování při nedostupném backendu.
+- [x] Připojit živý agentní runtime přímo k backendu, aby desktopový fallback už
+  nebyl potřeba.
 
 Známé omezení:
 
-- Telegram bridge po této přípravné části stále volá živý desktopový runtime přes
-  `main.py`. Přímé backend napojení zůstává další část `MIG-005`.
+- Samostatný backend spuštěný přes `python -m backend` bez embedded desktop handleru
+  dál vrací `runtime_unavailable`. Skutečná odpověď agenta přes backend je dostupná,
+  pokud běží desktopová aplikace s embedded backendem.
+- Agentní orchestrace pořád fyzicky běží v desktopovém procesu. Další migrační
+  kroky mají postupně přesunout desktop UI na backend a ztenčit `main.py`.
+
+## MIG-006 — Desktop přes backend
+
+Stav: `IN PROGRESS`
+
+Tento krok převádí desktopové UI na klienta backendu po menších částech. První
+hotová část přesměrovává textový vstup z dashboardu přes `POST /api/v1/messages`.
+Současné audio, mikrofon, přehrávání a živá Gemini session zatím zůstávají v
+`main.py`, protože realtime stream pro klienty bude samostatný krok `MIG-007`.
+
+Kontrolní body:
+
+- [x] Přidat obecného backend klienta pro `POST /api/v1/messages`.
+- [x] Přesměrovat desktopový textový vstup přes backend s `channel="desktop"` a
+  `client_id` ve tvaru `desktop:{session_id}`.
+- [x] Ukládat a znovu používat backend `conversation_id` pro desktopovou textovou
+  relaci.
+- [x] Zachovat přímý fallback do současné Gemini Live session při vypnutém,
+  nedostupném nebo přechodovém backendu.
+- [x] Zachovat lokální audio/TTS pro desktopové backend požadavky a dál potlačovat
+  lokální audio u Telegram požadavků.
+- [ ] Přesunout další desktopové orchestrace z `main.py` za backend kontrakt.
+- [x] Připravit realtime WebSocket kontrakt pro stav, text a audio.
+
+Známá omezení:
+
+- Desktopový text používá backend jako první cestu, ale embedded live handler pořád
+  volá současnou agentní relaci v desktopovém procesu.
+- Audio a mikrofonní smyčky ještě nejsou backend klienti. Jejich přesun bude záviset
+  na `MIG-007`.
+
+## MIG-007 — Realtime WebSocket API
+
+Stav: `IN PROGRESS`
+
+Tento krok zavádí realtime kontrakt pro klienty, které potřebují sledovat stav,
+text a později audio bez dotazování HTTP endpointů. První hotová část přidává
+WebSocket endpoint `GET/WS /api/v1/realtime` a backend event hub. Klient po
+připojení dostane `hello` událost se `schema_version="realtime.v1"`.
+
+Základní realtime událost má pole:
+
+- `event_id`, `event_type`, `timestamp`,
+- `channel`, `client_id`, `conversation_id`,
+- `role`, `text`,
+- `audio_mime_type`, `audio_base64`,
+- `payload`.
+
+Aktuálně používané typy událostí:
+
+- `hello` — úvodní handshake po WebSocket připojení.
+- `pong` — odpověď na klientský text `ping`.
+- `runtime_state` — změna připojení živého agentního runtime.
+- `message` — uložený uživatelský nebo asistentův textový turn.
+- `audio` — rezervovaný typ pro navazující streamování audia.
+
+Kontrolní body:
+
+- [x] Definovat realtime event model pro stav, text a budoucí audio.
+- [x] Přidat backend `RealtimeEventHub` pro připojené WebSocket klienty.
+- [x] Přidat WebSocket endpoint `/api/v1/realtime`.
+- [x] Doplnit realtime stav do `/api/v1/status`.
+- [x] Publikovat `runtime_state` při připojení a odpojení live handleru.
+- [x] Publikovat `message` eventy při zpracování `POST /api/v1/messages`.
+- [x] Napojit desktop UI jako realtime klienta s deduplikací lokálních logů.
+- [x] Postupně vypnout lokální logovací cesty tam, kde realtime eventy už pokrývají
+  stejné chování.
+- [ ] Přidat skutečné audio eventy nebo binární audio stream.
+- [ ] Navrhnout klientské příkazy pro přerušení, mute/pause a stav přehrávání.
+
+Známá omezení:
+
+- WebSocket zatím pouze vysílá serverové události. Klientské řídicí příkazy kromě
+  jednoduchého `ping` nejsou součástí kontraktu.
+- Audio pole jsou připravená v modelu, ale backend zatím neposílá reálné audio
+  bloky.
+- Desktopový klient realtime eventy čte jako primární zdroj pro desktopové textové
+  turny. Lokální logovací cesty v `main.py` zatím zůstávají pro hlas a fallbacky
+  kvůli kompatibilitě audio běhu.

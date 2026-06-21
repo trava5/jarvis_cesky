@@ -90,3 +90,17 @@ class LongTermDecisionItem(BaseModel):
 class MemoryImportResult(BaseModel):
     short_term_imported: int
     long_term_imported: int
+
+
+class RealtimeEvent(BaseModel):
+    event_id: str
+    event_type: str = Field(max_length=64)
+    timestamp: datetime
+    channel: str = Field(default="backend", max_length=64)
+    client_id: str | None = Field(default=None, max_length=128)
+    conversation_id: str | None = Field(default=None, max_length=128)
+    role: str | None = Field(default=None, max_length=32)
+    text: str | None = None
+    audio_mime_type: str | None = None
+    audio_base64: str | None = None
+    payload: dict[str, object] = Field(default_factory=dict)

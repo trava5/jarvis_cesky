@@ -38,7 +38,7 @@ Tyto nástroje patří do `actions` a musí mít záznam v `actions/tool_catalog
 | Feature | Stav | Popis |
 |---|---|---|
 | `001_elevenlabs_voice` | zapnuto | Hlasový provider ElevenLabs pro desktopový výstup, pokud je nakonfigurovaný v `.env`. |
-| `002_telegram_bridge` | textový a hlasový vstup | Telegram Bot API bridge pro komunikaci s běžící relací JARVIS; textové dotazy vrací text, hlasové zprávy se přepisují přes Gemini a odpověď se vždy vrací jako textová zpráva. |
+| `002_telegram_bridge` | textový a hlasový vstup | Telegram Bot API bridge pro komunikaci s JARVIS; textové i přepsané hlasové vstupy se posílají do backend API. V embedded desktop režimu backend vrací skutečnou odpověď agenta, při nedostupnosti zůstává bezpečný desktopový fallback. Odpověď se vždy vrací jako textová zpráva. |
 
 ## Vztah k profilům
 

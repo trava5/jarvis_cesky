@@ -7,7 +7,9 @@ Pracovní postup přizpůsobený prostředí Windows
 import asyncio
 import datetime
 import mimetypes
+import socket
 import threading
+import time
 import traceback
 import os
 import re
@@ -44,6 +46,9 @@ from wakeup_listener import WakeGestureListener
 
 elevenlabs_voice = import_module("features.001_elevenlabs_voice.provider")
 telegram_bridge_module = import_module("features.002_telegram_bridge.bridge")
+telegram_backend_module = import_module("features.002_telegram_bridge.backend_client")
+backend_client_module = import_module("backend.client")
+backend_realtime_module = import_module("backend.realtime_client")
 
 get_weather_summary = load_action_function(
     "actions.001_weather.weather",
@@ -93,6 +98,13 @@ def get_telegram_transcription_model() -> str:
         os.getenv("TELEGRAM_TRANSCRIPTION_MODEL", DEFAULT_TELEGRAM_TRANSCRIPTION_MODEL)
         or DEFAULT_TELEGRAM_TRANSCRIPTION_MODEL
     ).strip()
+
+
+def env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on", "enabled", "ano"}
 
 # ── Model ───────────────────────────────────────────────────────────────────
 LIVE_MODEL = "models/gemini-2.5-flash-native-audio-latest"
@@ -477,6 +489,19 @@ class JarvisLive:
         self._external_text_lock = asyncio.Lock()
         self._pending_text_replies: list[dict] = []
         self._telegram_bridge = None
+        self._telegram_backend = telegram_backend_module.TelegramBackendClient()
+        self._telegram_conversation_ids: dict[int, str] = {}
+        self._desktop_backend = backend_client_module.BackendClient()
+        self._desktop_backend_conversation_id: str | None = None
+        self._desktop_backend_lock = threading.Lock()
+        self._backend_realtime = backend_realtime_module.BackendRealtimeClient()
+        self._backend_realtime_connected = False
+        self._realtime_message_ids: set[str] = set()
+        self._message_log_dedupe: dict[tuple[str, str, str], float] = {}
+        self._message_log_lock = threading.RLock()
+        self._backend_runtime = None
+        self._embedded_backend_server = None
+        self._embedded_backend_thread = None
 
         self.ui.on_text_command  = self._on_text_command
         self.ui.on_pause_toggle  = self._on_pause_toggle
@@ -560,17 +585,132 @@ class JarvisLive:
         except Exception as exc:
             self.ui.write_debug(f"Paměť konverzace: {exc}", level="WARN")
 
+    @staticmethod
+    def _normalize_message_source(source: str | None) -> str:
+        value = str(source or "").strip().lower()
+        if value in {"desktop", "text", "backend_desktop"}:
+            return "desktop"
+        if value in {"telegram", "telegram_voice", "backend_telegram"}:
+            return "telegram"
+        if value in {"voice", "audio"}:
+            return "voice"
+        return value or "unknown"
+
+    def _write_message_log(self, role: str, text: str, source: str | None = None) -> bool:
+        clean_text = str(text or "").strip()
+        if not clean_text:
+            return False
+        normalized_role = str(role or "").strip().lower()
+        normalized_source = self._normalize_message_source(source)
+        key = (normalized_role, normalized_source, clean_text)
+        now = time.monotonic()
+        with self._message_log_lock:
+            expired = [
+                item
+                for item, created_at in self._message_log_dedupe.items()
+                if now - created_at > 120
+            ]
+            for item in expired:
+                self._message_log_dedupe.pop(item, None)
+            if key in self._message_log_dedupe:
+                return False
+            self._message_log_dedupe[key] = now
+
+        if normalized_role == "user":
+            label = "Vy" if normalized_source in {"desktop", "voice"} else f"Vy ({normalized_source})"
+        elif normalized_role == "assistant":
+            label = "JARVIS"
+        else:
+            label = normalized_role.upper() if normalized_role else "SYS"
+        self.ui.write_log(f"{label}: {clean_text}")
+        return True
+
+    def _pending_reply_source(self) -> str | None:
+        if not self._pending_text_replies:
+            return None
+        pending = self._pending_text_replies[0]
+        return str(pending.get("source", "") or "") or None
+
+    def _use_realtime_message_log(self, source: str | None) -> bool:
+        return (
+            bool(getattr(self, "_backend_realtime_connected", False))
+            and self._normalize_message_source(source) == "desktop"
+        )
+
     def _on_text_command(self, text: str):
         if self._paused:
             return
-        self.ui.write_log(f"Vy: {text}")
-        self._remember_turn("user", text, {"source": "text"})
+        clean_text = str(text or "").strip()
+        if not clean_text:
+            return
+        user_logged = False
+        if not self._use_realtime_message_log("desktop"):
+            user_logged = self._write_message_log("user", clean_text, source="desktop")
+        thread = threading.Thread(
+            target=self._handle_desktop_text_backend,
+            args=(clean_text, user_logged),
+            name="JarvisDesktopTextBackend",
+            daemon=True,
+        )
+        thread.start()
+
+    def _handle_desktop_text_backend(self, text: str, user_already_logged: bool = False):
+        if self._paused:
+            return
+        if not self._desktop_backend.enabled:
+            self._send_text_direct(text, log_user=not user_already_logged)
+            return
+
+        with self._desktop_backend_lock:
+            conversation_id = self._desktop_backend_conversation_id
+
+        try:
+            result = self._desktop_backend.send_message(
+                text,
+                client_id=f"desktop:{self._session_id}",
+                channel="desktop",
+                conversation_id=conversation_id,
+                want_audio=False,
+            )
+        except backend_client_module.BackendClientError as exc:
+            self.ui.write_debug(f"Desktop backend klient: {exc}", level="WARN")
+            self._send_text_direct(text, log_user=not user_already_logged)
+            return
+
+        if result.conversation_id:
+            with self._desktop_backend_lock:
+                self._desktop_backend_conversation_id = result.conversation_id
+
+        if result.should_fallback:
+            detail = f" ({result.detail})" if result.detail else ""
+            self.ui.write_debug(
+                f"Desktop backend vrátil stav {result.status}{detail}, používám přímý fallback.",
+                level="WARN",
+            )
+            self._send_text_direct(text, log_user=not user_already_logged)
+            return
+
+        if (
+            result.text.strip()
+            and not self._backend_runtime
+            and not self._use_realtime_message_log("desktop")
+        ):
+            self._write_message_log("assistant", result.text.strip(), source="desktop")
+            self._remember_turn("assistant", result.text.strip(), {"source": "backend_desktop"})
+
+    def _send_text_direct(self, text: str, log_user: bool = True):
+        clean_text = str(text or "").strip()
+        if not clean_text:
+            return
+        if log_user:
+            self._write_message_log("user", clean_text, source="desktop")
+        self._remember_turn("user", clean_text, {"source": "text"})
         if not self._loop or not self.session:
             self.ui.write_log("ERR: Připojení JARVIS ještě není připravené.")
             return
         asyncio.run_coroutine_threadsafe(
             self.session.send_client_content(
-                turns={"parts": [{"text": text}]},
+                turns={"parts": [{"text": clean_text}]},
                 turn_complete=True
             ),
             self._loop
@@ -593,13 +733,234 @@ class JarvisLive:
         except Exception as exc:
             self.ui.write_log(f"ERR: Telegram bridge se nepodařilo spustit: {exc}")
 
-    def _handle_telegram_text(self, text: str, chat_id: int) -> str:
+    def start_embedded_backend(self):
+        if not env_bool("JARVIS_EMBEDDED_BACKEND_ENABLED", default=True):
+            self.ui.write_debug("Embedded backend je vypnutý.", level="INFO")
+            return
+        if self._embedded_backend_thread and self._embedded_backend_thread.is_alive():
+            return
+
+        try:
+            backend_config_module = import_module("backend.config")
+            backend_app_module = import_module("backend.app")
+            uvicorn_module = import_module("uvicorn")
+
+            settings = backend_config_module.load_settings()
+            if not self._backend_port_available(settings.host, settings.port):
+                self.ui.write_debug(
+                    f"Embedded backend se nespustil, port {settings.host}:{settings.port} je obsazený.",
+                    level="WARN",
+                )
+                return
+
+            app = backend_app_module.create_app(settings=settings)
+            self._backend_runtime = getattr(app.state, "agent_runtime", None)
+            config = uvicorn_module.Config(
+                app,
+                host=settings.host,
+                port=settings.port,
+                log_level="warning",
+                access_log=False,
+            )
+            server = uvicorn_module.Server(config)
+            self._embedded_backend_server = server
+
+            def serve_backend():
+                try:
+                    asyncio.run(server.serve())
+                except Exception as exc:
+                    self.ui.write_debug(f"Embedded backend: {exc}", level="WARN")
+
+            thread = threading.Thread(
+                target=serve_backend,
+                name="JarvisEmbeddedBackend",
+                daemon=True,
+            )
+            self._embedded_backend_thread = thread
+            thread.start()
+            display_host = "127.0.0.1" if settings.host in {"", "0.0.0.0"} else settings.host
+            self.ui.write_log(
+                f"SYS: Backend API běží na http://{display_host}:{settings.port}{settings.api_prefix}."
+            )
+        except Exception as exc:
+            self.ui.write_debug(f"Embedded backend se nepodařilo spustit: {exc}", level="WARN")
+
+    def start_backend_realtime_client(self):
+        if not self._backend_realtime.enabled:
+            self.ui.write_debug("Backend realtime klient je vypnutý.", level="INFO")
+            return
+        started = self._backend_realtime.start(
+            self._handle_backend_realtime_event,
+            logger=self._log_backend_realtime,
+        )
+        if started:
+            self.ui.write_debug(
+                f"Backend realtime klient se připojuje na {self._backend_realtime.config.realtime_url}.",
+                level="INFO",
+            )
+
+    def _log_backend_realtime(self, message: str):
+        lowered = str(message).lower()
+        if "reconnect" in lowered:
+            self._backend_realtime_connected = False
+        level = "WARN" if "reconnect" in lowered else "INFO"
+        self.ui.write_debug(message, level=level)
+
+    def _handle_backend_realtime_event(self, event: dict):
+        if not isinstance(event, dict):
+            return
+        event_type = str(event.get("event_type", "") or "").strip()
+        if event_type == "hello":
+            self._backend_realtime_connected = True
+            payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            schema_version = payload.get("schema_version", "neznámá verze")
+            self.ui.write_debug(f"Backend realtime handshake: {schema_version}", level="INFO")
+            return
+        if event_type == "runtime_state":
+            self._handle_backend_runtime_state_event(event)
+            return
+        if event_type == "message":
+            self._handle_backend_message_event(event)
+            return
+        if event_type and event_type != "pong":
+            self.ui.write_debug(f"Backend realtime event: {event_type}", level="INFO")
+
+    def _handle_backend_runtime_state_event(self, event: dict):
+        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+        connected = bool(payload.get("connected"))
+        detail = str(payload.get("detail", "") or "").strip()
+        state = "připojený" if connected else "odpojený"
+        suffix = f": {detail}" if detail else ""
+        self.ui.write_debug(f"Backend runtime je {state}{suffix}", level="INFO" if connected else "WARN")
+
+    def _handle_backend_message_event(self, event: dict):
+        event_id = str(event.get("event_id", "") or "").strip()
+        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+        message_id = str(payload.get("message_id", "") or "").strip()
+        dedupe_id = message_id or event_id
+        if dedupe_id:
+            with self._message_log_lock:
+                if dedupe_id in self._realtime_message_ids:
+                    return
+                self._realtime_message_ids.add(dedupe_id)
+                if len(self._realtime_message_ids) > 500:
+                    self._realtime_message_ids = set(list(self._realtime_message_ids)[-250:])
+
+        role = str(event.get("role", "") or "").strip().lower()
+        text = str(event.get("text", "") or "").strip()
+        channel = str(event.get("channel", "") or "").strip().lower()
+        status = str(payload.get("status", "") or "").strip()
+        if not role or not text:
+            return
+
+        if role == "assistant" and status in {"runtime_unavailable", "not_implemented", "runtime_error"}:
+            self.ui.write_debug(f"Backend realtime assistant fallback: {status}", level="INFO")
+            return
+
+        source = channel or "backend"
+        self._write_message_log(role, text, source=source)
+
+    @staticmethod
+    def _backend_port_available(host: str, port: int) -> bool:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.bind((host or "127.0.0.1", int(port)))
+            return True
+        except OSError:
+            return False
+
+    def _connect_backend_runtime(self) -> None:
+        if not self._backend_runtime:
+            return
+        self._backend_runtime.connect(
+            self._handle_backend_message,
+            detail="Desktopová Gemini Live relace je připojená k backendu.",
+        )
+        self.ui.write_debug("Backend runtime je připojený k živé relaci.", level="INFO")
+
+    def _disconnect_backend_runtime(self) -> None:
+        if not self._backend_runtime:
+            return
+        self._backend_runtime.disconnect(
+            detail="Desktopová Gemini Live relace není připojená k backendu.",
+        )
+        self.ui.write_debug("Backend runtime byl odpojen od živé relace.", level="INFO")
+
+    async def _handle_backend_message(self, request) -> str:
         if self._paused:
             return "JARVIS je pozastavený."
         if not self._loop or not self.session:
+            raise RuntimeError("JARVIS ještě není připojený.")
+
+        source_channel = str(getattr(request, "channel", "") or "api").strip().lower() or "api"
+        is_desktop_text = source_channel == "desktop"
+        source = "text" if is_desktop_text else f"backend_{source_channel}"
+        chat_id = self._telegram_chat_id_from_client_id(getattr(request, "client_id", None))
+        future = asyncio.run_coroutine_threadsafe(
+            self._ask_text_external(
+                str(getattr(request, "text", "") or ""),
+                source=source,
+                chat_id=chat_id,
+                suppress_audio=not is_desktop_text,
+                log_user=not is_desktop_text,
+            ),
+            self._loop,
+        )
+        result = await asyncio.to_thread(future.result, 90)
+        if isinstance(result, dict):
+            return str(result.get("text", "") or "")
+        return str(result or "")
+
+    @staticmethod
+    def _telegram_chat_id_from_client_id(client_id: str | None) -> int | None:
+        value = str(client_id or "").strip()
+        if not value.startswith("telegram:"):
+            return None
+        try:
+            return int(value.split(":", 1)[1])
+        except ValueError:
+            return None
+
+    def _handle_telegram_text(self, text: str, chat_id: int) -> str:
+        return self._handle_telegram_prompt(text, chat_id, source="telegram")
+
+    def _handle_telegram_prompt(self, text: str, chat_id: int, source: str) -> str:
+        if self._paused:
+            return "JARVIS je pozastavený."
+        backend_reply = self._try_telegram_backend(text, chat_id, source)
+        if backend_reply is not None:
+            return backend_reply
+        return self._handle_telegram_desktop_prompt(text, chat_id, source)
+
+    def _try_telegram_backend(self, text: str, chat_id: int, source: str) -> str | None:
+        if not self._telegram_backend.enabled:
+            return None
+        try:
+            result = self._telegram_backend.send_message(
+                text,
+                client_id=f"telegram:{chat_id}",
+                conversation_id=self._telegram_conversation_ids.get(chat_id),
+                channel="telegram",
+            )
+        except telegram_backend_module.TelegramBackendError as exc:
+            self.ui.write_debug(f"Telegram backend fallback ({source}): {exc}", level="WARN")
+            return None
+
+        if result.conversation_id:
+            self._telegram_conversation_ids[chat_id] = result.conversation_id
+        if result.should_fallback:
+            self.ui.write_debug(
+                f"Telegram backend vyžaduje desktopový fallback ({source}): {result.status}",
+                level="INFO",
+            )
+            return None
+        return result.text
+
+    def _handle_telegram_desktop_prompt(self, text: str, chat_id: int, source: str) -> str:
+        if not self._loop or not self.session:
             return "JARVIS ještě není připojený. Zkuste to za chvíli."
         future = asyncio.run_coroutine_threadsafe(
-            self._ask_text_external(text, source="telegram", chat_id=chat_id),
+            self._ask_text_external(text, source=source, chat_id=chat_id),
             self._loop,
         )
         try:
@@ -608,7 +969,8 @@ class JarvisLive:
                 return str(result.get("text", "") or "")
             return str(result or "")
         except Exception as exc:
-            self.ui.write_debug(f"Telegram text: {exc}", level="WARN")
+            label = "Telegram hlas" if source == "telegram_voice" else "Telegram text"
+            self.ui.write_debug(f"{label}: {exc}", level="WARN")
             return "Odpověď se nepodařilo získat včas."
 
     def _handle_telegram_voice(self, path: Path, chat_id: int, voice: dict):
@@ -632,22 +994,7 @@ class JarvisLive:
         return reply or "Nepodařilo se získat odpověď agenta."
 
     def _handle_telegram_voice_prompt(self, text: str, chat_id: int) -> str:
-        if self._paused:
-            return "JARVIS je pozastavený."
-        if not self._loop or not self.session:
-            return "JARVIS ještě není připojený. Zkuste to za chvíli."
-        future = asyncio.run_coroutine_threadsafe(
-            self._ask_text_external(
-                text,
-                source="telegram_voice",
-                chat_id=chat_id,
-            ),
-            self._loop,
-        )
-        result = future.result(timeout=90)
-        if isinstance(result, dict):
-            return str(result.get("text", "") or "")
-        return str(result or "")
+        return self._handle_telegram_prompt(text, chat_id, source="telegram_voice")
 
     def _transcribe_telegram_voice(self, path: Path) -> str:
         if not path.exists():
@@ -681,6 +1028,8 @@ class JarvisLive:
         text: str,
         source: str,
         chat_id: int | None = None,
+        suppress_audio: bool = True,
+        log_user: bool = True,
     ):
         async with self._external_text_lock:
             if not self.session:
@@ -691,9 +1040,11 @@ class JarvisLive:
                 {
                     "future": reply_future,
                     "source": source,
+                    "suppress_audio": suppress_audio,
                 }
             )
-            self.ui.write_log(f"Vy ({source}): {text}")
+            if log_user:
+                self._write_message_log("user", text, source=source)
             metadata = {"source": source}
             if chat_id is not None:
                 metadata["chat_id"] = chat_id
@@ -717,12 +1068,12 @@ class JarvisLive:
         pending = self._pending_text_replies.pop(0)
         future = pending.get("future")
         if not future or future.done():
-            return True
+            return bool(pending.get("suppress_audio", True))
         future.set_result({"text": text})
-        return True
+        return bool(pending.get("suppress_audio", True))
 
     def _capture_external_audio_chunk(self, _data: bytes) -> bool:
-        return bool(self._pending_text_replies)
+        return any(bool(pending.get("suppress_audio", True)) for pending in self._pending_text_replies)
 
     async def _interrupt_audio(self):
         try:
@@ -1148,7 +1499,7 @@ class JarvisLive:
 
                             full_in = " ".join(in_buf).strip()
                             if full_in:
-                                self.ui.write_log(f"Vy: {full_in}")
+                                self._write_message_log("user", full_in, source="voice")
                                 self._remember_turn("user", full_in, {"source": "voice"})
                             in_buf = []
 
@@ -1156,11 +1507,13 @@ class JarvisLive:
                             if not full_out:
                                 full_out = " ".join(text_out_buf).strip()
                             if full_out:
-                                self.ui.write_log(f"JARVIS: {full_out}")
+                                assistant_source = self._pending_reply_source() or "voice"
+                                if not self._use_realtime_message_log(assistant_source):
+                                    self._write_message_log("assistant", full_out, source=assistant_source)
                                 self._remember_turn("assistant", full_out, {"source": "voice"})
-                                external_reply_delivered = self._notify_text_reply(full_out)
+                                suppress_local_tts = self._notify_text_reply(full_out)
                                 if (
-                                    not external_reply_delivered
+                                    not suppress_local_tts
                                     and self._uses_elevenlabs_voice()
                                     and self.tts_text_queue
                                 ):
@@ -1295,29 +1648,36 @@ class JarvisLive:
                 self.ui.set_state("THINKING")
                 config = self._build_config()
                 uses_elevenlabs = self._uses_elevenlabs_voice()
+                runtime_connected = False
 
-                async with (
-                    client.aio.live.connect(model=LIVE_MODEL, config=config) as session,
-                    asyncio.TaskGroup() as tg,
-                ):
-                    self.session        = session
-                    self._loop          = asyncio.get_event_loop()
-                    self.audio_in_queue = asyncio.Queue()
-                    self.tts_text_queue = asyncio.Queue()
-                    self.out_queue      = asyncio.Queue(maxsize=10)
+                try:
+                    async with (
+                        client.aio.live.connect(model=LIVE_MODEL, config=config) as session,
+                        asyncio.TaskGroup() as tg,
+                    ):
+                        self.session        = session
+                        self._loop          = asyncio.get_event_loop()
+                        self.audio_in_queue = asyncio.Queue()
+                        self.tts_text_queue = asyncio.Queue()
+                        self.out_queue      = asyncio.Queue(maxsize=10)
 
-                    provider_label = "ElevenLabs" if uses_elevenlabs else "Gemini Live"
-                    print(f"[JARVIS] ✅ Připojeno. Hlas: {provider_label}")
-                    self.ui.set_state("LISTENING")
-                    self.ui.write_log(f"SYS: JARVIS je připraven. Hlas: {provider_label}. Poslouchám...")
+                        provider_label = "ElevenLabs" if uses_elevenlabs else "Gemini Live"
+                        print(f"[JARVIS] ✅ Připojeno. Hlas: {provider_label}")
+                        self.ui.set_state("LISTENING")
+                        self.ui.write_log(f"SYS: JARVIS je připraven. Hlas: {provider_label}. Poslouchám...")
+                        self._connect_backend_runtime()
+                        runtime_connected = True
 
-                    tg.create_task(self._send_realtime())
-                    tg.create_task(self._listen_audio())
-                    tg.create_task(self._receive_audio())
-                    if uses_elevenlabs:
-                        tg.create_task(self._play_elevenlabs_text())
-                    else:
-                        tg.create_task(self._play_audio())
+                        tg.create_task(self._send_realtime())
+                        tg.create_task(self._listen_audio())
+                        tg.create_task(self._receive_audio())
+                        if uses_elevenlabs:
+                            tg.create_task(self._play_elevenlabs_text())
+                        else:
+                            tg.create_task(self._play_audio())
+                finally:
+                    if runtime_connected:
+                        self._disconnect_backend_runtime()
 
                 self.session = None
                 self.audio_in_queue = None
@@ -1364,6 +1724,8 @@ def main():
     def runner():
         ui.wait_for_api_key()
         jarvis = JarvisLive(ui)
+        jarvis.start_embedded_backend()
+        jarvis.start_backend_realtime_client()
         jarvis.start_telegram_bridge()
         try:
             asyncio.run(jarvis.run())

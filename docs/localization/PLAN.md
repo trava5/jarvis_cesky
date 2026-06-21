@@ -1,6 +1,6 @@
 # Plán české lokalizace
 
-Aktualizováno: 2026-06-20
+Aktualizováno: 2026-06-21
 
 ## Přehled
 
@@ -37,6 +37,12 @@ Aktualizováno: 2026-06-20
 | ARCH-009 | SQLAlchemy 2.0 modely pro konverzační data | DONE |
 | ARCH-010 | PostgreSQL repository pro konverzační data | DONE |
 | ARCH-011 | Backend storage pro krátkodobou paměť a dlouhodobá rozhodnutí | DONE |
+| ARCH-012 | Telegram backend klient a desktopový fallback | DONE |
+| ARCH-013 | Embedded backend s živým agentním runtime | DONE |
+| ARCH-014 | Desktop textový vstup přes backend | DONE |
+| ARCH-015 | Realtime WebSocket kontrakt backendu | DONE |
+| ARCH-016 | Desktop realtime klient nad backendem | DONE |
+| ARCH-017 | Realtime-first logování desktopových textů | DONE |
 | DOC-001 | Uložení stavu projektu a konverzace před restartem | DONE |
 | FEAT-001 | Feature hlasového provideru ElevenLabs | DONE |
 | UI-001 | Dashboardový přepínač hlasu | DONE |
@@ -418,6 +424,80 @@ Stav: `DONE`
 - [x] Přidat idempotentní import současných SQLite záznamů.
 - [x] Ověřit PostgreSQL zápis, čtení, vyhledávání a import bez zveřejnění hodnot z `.env`.
 - [x] Aktualizovat migrační plán, backend dokumentaci a historii.
+
+## ARCH-012 — Telegram backend klient a desktopový fallback
+
+Stav: `DONE`
+
+- [x] Přidat backend klienta nebo adapter pro volání `POST /api/v1/messages`.
+- [x] Přesměrovat Telegram textový vstup přes backend.
+- [x] Zachovat desktopový fallback při nedostupném backendu nebo přechodovém stavu runtime.
+- [x] Zachovat textové odpovědi Telegramu bez audio větví.
+- [x] Aktualizovat migrační plán, dokumentaci feature a stavové soubory.
+- [x] Ověřit syntaxi a smoke testy bez externího Telegram API volání.
+- [x] Zapsat výsledek do historie.
+
+## ARCH-013 — Embedded backend s živým agentním runtime
+
+Stav: `DONE`
+
+- [x] Přidat volitelný live handler do backend `AgentRuntime`.
+- [x] Zachovat samostatný backend běh s přechodovým stavem bez živého runtime.
+- [x] Spustit embedded backend z desktopové aplikace s handlerem napojeným na živou relaci.
+- [x] Přesměrovat `POST /api/v1/messages` na skutečnou odpověď agenta, pokud je handler připojený.
+- [x] Zachovat bezpečný fallback při nepřipojeném runtime nebo chybě handleru.
+- [x] Aktualizovat migrační plán, backend dokumentaci a stavové soubory.
+- [x] Ověřit syntaxi a API smoke testy.
+- [x] Zapsat výsledek do historie.
+
+## ARCH-014 — Desktop textový vstup přes backend
+
+Stav: `DONE`
+
+- [x] Přidat obecného backend klienta pro `POST /api/v1/messages`.
+- [x] Přesměrovat desktopový textový vstup přes backend API.
+- [x] Zachovat lokální audio/mikrofonní běh v `main.py`.
+- [x] Zachovat přímý desktopový fallback při nedostupném backendu.
+- [x] Aktualizovat migrační plán, backend dokumentaci a stavové soubory.
+- [x] Ověřit syntaxi a smoke testy bez externích API volání.
+- [x] Zapsat výsledek do historie.
+
+## ARCH-015 — Realtime WebSocket kontrakt backendu
+
+Stav: `DONE`
+
+- [x] Přidat backend realtime event model pro stav, text a budoucí audio.
+- [x] Přidat WebSocket endpoint pro odběr realtime událostí.
+- [x] Napojit `AgentRuntime` na publikování runtime stavu a textových zpráv.
+- [x] Zachovat stávající HTTP message kontrakt a desktopový běh.
+- [x] Aktualizovat migrační plán, backend dokumentaci a stavové soubory.
+- [x] Ověřit syntaxi a WebSocket smoke test bez externích API volání.
+- [x] Zapsat výsledek do historie.
+
+## ARCH-016 — Desktop realtime klient nad backendem
+
+Stav: `DONE`
+
+- [x] Přidat desktopový WebSocket klient pro `/api/v1/realtime`.
+- [x] Spouštět realtime klienta z desktopové aplikace po startu backendu.
+- [x] Zpracovávat `hello`, `runtime_state` a `message` eventy bez dvojitého logování.
+- [x] Zachovat současný lokální audio/mikrofonní běh.
+- [x] Aktualizovat migrační plán, backend dokumentaci a stavové soubory.
+- [x] Ověřit syntaxi a smoke testy bez externích API volání.
+- [x] Zapsat výsledek do historie.
+
+## ARCH-017 — Realtime-first logování desktopových textů
+
+Stav: `DONE`
+
+- [x] Sledovat aktivní realtime handshake desktop klienta.
+- [x] Vypnout lokální zápis desktopového user turnu, pokud ho pokrývá realtime event.
+- [x] Vypnout lokální zápis desktopové assistant odpovědi, pokud ji pokrývá realtime event.
+- [x] Zachovat lokální fallback logování při nedostupném backendu nebo realtime klientovi.
+- [x] Zachovat lokální logování hlasových turnů, dokud nejsou realtime audio/text eventy.
+- [x] Aktualizovat migrační plán a stavové soubory.
+- [x] Ověřit syntaxi a smoke testy bez externích API volání.
+- [x] Zapsat výsledek do historie.
 
 ## FEAT-001 — ElevenLabs hlasový provider
 

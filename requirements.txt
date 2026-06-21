@@ -13,5 +13,6 @@ mss
 tzdata
 fastapi
 uvicorn
+websockets
 sqlalchemy
 asyncpg

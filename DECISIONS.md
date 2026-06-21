@@ -486,3 +486,34 @@ vrstva, dokud nebude bezpečně migrována.
   zapisovat do dokumentace ani verzovaných souborů.
 - API endpointy mají používat stabilní verzi v cestě, například `/api/v1/...`,
   aby budoucí mobilní klienti nebyli vázaní na interní refaktoring.
+
+## ADR-017 — Embedded backend jako přechodové napojení živého runtime
+
+Datum: 2026-06-21
+Stav: `ACCEPTED`
+
+### Kontext
+
+Telegram už používá backend API jako první cestu, ale živý Gemini runtime zatím
+běží v desktopové aplikaci. Samostatný backend proces nemá přímý přístup k
+aktuální živé relaci, mikrofonu, frontám odpovědí ani existující orchestrace v
+`main.py`.
+
+### Rozhodnutí
+
+Jako přechodový krok se desktopová aplikace může spustit s embedded FastAPI
+backendem ve stejném procesu. Embedded backend používá stejný HTTP kontrakt jako
+samostatný backend, ale jeho `AgentRuntime` dostane live handler napojený na
+aktuální desktopovou Gemini Live relaci. Samostatný backend spuštěný přes
+`python -m backend` zůstává podporovaný a bez live handleru dál vrací řízený stav
+`runtime_unavailable`.
+
+### Důsledky
+
+- Telegram a další klienti mohou používat `/api/v1/messages` a dostat skutečnou
+  odpověď agenta, pokud běží desktop s embedded backendem.
+- Současný desktopový běh zůstává funkční a backendový krok není závislý na
+  okamžitém přesunu celé agentní orchestrace mimo `main.py`.
+- Embedded backend je přechodová architektura. Další migrace má postupně přesunout
+  runtime orchestrace za backend tak, aby samostatný backend nepotřeboval desktopový
+  proces jako hostitele živé relace.

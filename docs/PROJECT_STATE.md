@@ -1,6 +1,6 @@
 # Stav projektu
 
-Aktualizováno: 2026-06-20
+Aktualizováno: 2026-06-21
 
 Tento soubor slouží jako rychlý návratový bod po restartu stanice nebo vývojového
 prostředí. Neobsahuje žádné hodnoty z `.env`, tokeny ani databázové connection
@@ -56,27 +56,53 @@ Platná architektonická rozhodnutí jsou hlavně:
 
 ## Aktuálně rozpracováno
 
-`MIG-005` má stav `IN PROGRESS`.
+`MIG-006` a `MIG-007` mají stav `IN PROGRESS`.
 
-Hotová je přípravná část Telegram kanálu:
+Hotová první část desktopového kanálu:
 
-- Telegram dál přijímá textové zprávy.
-- Telegram dál přijímá hlasové zprávy a přepisuje je přes Gemini do textu.
-- Telegram už neodesílá hlasové ani audio odpovědi; textový i hlasový vstup vrací
-  jen textovou zprávu.
+- Přidán obecný HTTP klient `backend.client` pro `POST /api/v1/messages`.
+- Text z dashboardu se posílá nejdřív do backend API s `channel="desktop"` a
+  `client_id` ve tvaru `desktop:{session_id}`.
+- Desktopová textová relace si ukládá a znovu používá backend `conversation_id`.
+- Při vypnutém, nedostupném nebo přechodovém backendu zůstává přímý fallback do
+  současné Gemini Live session v `main.py`.
+- Desktopový backend požadavek nepotlačuje lokální audio ani ElevenLabs TTS; toto
+  potlačení zůstává jen pro externí kanály, jako je Telegram.
 
-Zbývající část `MIG-005` je přesměrování Telegram bridge přes backend API.
+Hotová první část realtime kontraktu:
+
+- Přidán backend `RealtimeEventHub` a WebSocket endpoint `/api/v1/realtime`.
+- WebSocket po připojení posílá `hello` event se `schema_version="realtime.v1"`.
+- `/api/v1/status` vrací počet připojených realtime klientů.
+- `AgentRuntime` publikuje `runtime_state` při připojení/odpojení live handleru.
+- `POST /api/v1/messages` publikuje realtime `message` eventy pro uživatelský i
+  asistentův turn.
+- Přidán desktopový realtime klient `backend.realtime_client`, který se spouští z
+  `main.py` po startu backendu.
+- Dashboard přijímá `hello`, `runtime_state` a `message` eventy a deduplikuje je
+  proti současným lokálním logům.
+- Desktopové textové user a assistant turny jsou realtime-first: pokud je WebSocket
+  handshake aktivní, dashboard čeká na backend `message` event a lokálně zapisuje
+  jen fallback.
+
+Známé omezení:
+
+- Audio, mikrofon a přehrávání jsou zatím pořád řízené v `main.py`.
+- Embedded live handler pořád volá současnou agentní relaci v desktopovém procesu.
+- WebSocket zatím neposílá reálné audio bloky; audio pole jsou jen připravená v
+  kontraktu události.
+- Lokální logovací cesty v `main.py` zatím zůstávají pro hlas a fallbacky kvůli
+  kompatibilitě audio běhu.
+- Samostatný backend bez desktop handleru dál vrací `runtime_unavailable`.
 
 ## Další krok po restartu
 
-Pokračovat další částí `MIG-005`:
+Pokračovat v `MIG-006`:
 
-1. Přidat backend klienta nebo adapter pro volání `POST /api/v1/messages`.
-2. Přesměrovat Telegram textový vstup přes backend při zachování bezpečného
-   desktopového fallbacku.
-3. Přesměrovat přepsaný Telegram hlasový vstup přes stejnou backend cestu.
-4. Ověřit `conversation_id`, `client_id`, kanál `telegram` a chování při
-   nedostupném backendu.
+1. Přesunout další desktopovou konverzační orchestraci z `main.py` za backend
+   kontrakt.
+2. Navrhnout skutečný audio stream a klientské řídicí příkazy pro `MIG-007`.
+3. Převést další hlasové nebo stavové části až po stabilizaci realtime audio kontraktu.
 
 ## Důležité soubory
 
@@ -96,6 +122,9 @@ Pokračovat další částí `MIG-005`:
 - `backend/services/postgres_memory.py` — PostgreSQL implementace paměti.
 - `backend/services/memory_migration.py` — import současné SQLite paměti.
 - `backend/services/agent_runtime.py` — backend runtime mezivrstva.
+- `backend/services/realtime.py` — WebSocket event hub pro realtime klienty.
+- `backend/client.py` — obecný HTTP klient pro backend message kontrakt.
+- `backend/realtime_client.py` — desktopový WebSocket klient pro realtime eventy.
 - `backend/db/base.py` — SQLAlchemy declarative base.
 - `backend/db/models.py` — SQLAlchemy ORM modely.
 - `backend/db/session.py` — vytvoření async engine, sessionmaker a inicializace
@@ -117,6 +146,37 @@ Před uložením stavu byly ověřeny:
 - Syntaxe `main.py` a `features/002_telegram_bridge/bridge.py` po změně Telegramu.
 - Izolovaný smoke test Telegram bridge bez externího API volání potvrdil, že textový
   i hlasový update odpovídají přes `sendMessage` a nevolají `sendAudio`.
+- Syntaxe `features/002_telegram_bridge/backend_client.py` a souvisejících backend
+  message modulů.
+- Smoke test backend klienta ověřil payload pro `POST /api/v1/messages` a finální
+  backend odpověď bez fallbacku.
+- Smoke test `main.py` ověřil použití backend odpovědi i desktopový fallback pro
+  `runtime_unavailable` u textového i přepsaného hlasového vstupu.
+- API smoke test nad in-memory backendem ověřil `conversation_id`, `client_id`
+  `telegram:123`, kanál `telegram` a očekávaný stav `runtime_unavailable`.
+- `AgentRuntime` smoke test ověřil připojený live handler, stav `ok` a uložení
+  uživatelské i asistentovy zprávy.
+- FastAPI smoke test ověřil, že `app.state.agent_runtime.connect(...)` přepne
+  `/api/v1/messages` na skutečnou odpověď handleru a `/api/v1/status` hlásí
+  připojený runtime.
+- Syntaxe `backend/client.py` a `main.py` prošla přes `py_compile` po přesměrování
+  desktopového textového vstupu přes backend.
+- Smoke test `BackendClient` ověřil desktopový payload, URL, `conversation_id` a
+  dvojici timeoutů pro `POST /api/v1/messages`.
+- Izolovaný smoke test `main.py` ověřil desktopový fallback při
+  `runtime_unavailable`, ukládání backend `conversation_id` a rozdíl mezi
+  potlačeným Telegram audiem a zachovaným desktopovým audiem.
+- Syntaxe realtime backend modulů prošla přes `py_compile`.
+- WebSocket smoke test ověřil `hello`, `pong`, realtime status a `message` eventy
+  při `POST /api/v1/messages`.
+- Smoke test runtime stavu ověřil `runtime_state` event při připojení live handleru.
+- Syntaxe `backend/realtime_client.py` a `main.py` prošla přes `py_compile`.
+- Smoke test `BackendRealtimeClient` ověřil odvození URL, explicitní realtime URL a
+  parsování eventů.
+- Smoke test `main.py` ověřil zpracování `hello`, `message`, deduplikaci zpráv a
+  filtrování přechodové `runtime_unavailable` odpovědi.
+- Smoke test `main.py` ověřil realtime-first desktop logování, vypnutí lokálního
+  zápisu při aktivním handshake a zachování lokálního fallback logování.
 
 Známé upozornění:
 

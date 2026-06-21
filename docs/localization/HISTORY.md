@@ -1735,3 +1735,225 @@ Známé omezení:
   Přímé napojení na backend API zůstává další část rozpracovaného `MIG-005`.
 - Desktopový `memory/memory_manager.py` zůstává kompatibilní přechodová vrstva;
   nový backend storage je připravený pro klienty a budoucí přesun runtime.
+
+## 2026-06-21 — ARCH-012 — Telegram backend klient a desktopový fallback
+
+Stav: `DONE`
+
+Provedeno:
+
+- Přidán `features/002_telegram_bridge/backend_client.py` jako synchronní klient
+  pro `POST /api/v1/messages`.
+- Telegram textové vstupy se v `main.py` posílají nejdřív do backend API s
+  `channel="telegram"` a `client_id` ve tvaru `telegram:{chat_id}`.
+- Přepsané hlasové vstupy z Telegramu používají stejnou backend cestu jako text.
+- `conversation_id` z backendu se ukládá per Telegram chat a posílá se v dalších
+  zprávách stejného chatu.
+- Při nedostupném backendu nebo stavech `runtime_unavailable` / `not_implemented`
+  zůstává zachovaný desktopový fallback přes současnou živou relaci v `main.py`.
+- Přidány konfigurační proměnné `TELEGRAM_BACKEND_ENABLED`,
+  `TELEGRAM_BACKEND_BASE_URL` a `TELEGRAM_BACKEND_TIMEOUT_SECONDS` do
+  `.env.example`.
+- Dokumentace Telegram feature, přehled features, backend dokumentace, migrační
+  plán, slovník a návratové stavové soubory byly aktualizované.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile main.py features\002_telegram_bridge\bridge.py features\002_telegram_bridge\backend_client.py backend\api.py backend\schemas.py backend\services\agent_runtime.py`
+- Smoke test `TelegramBackendClient` ověřil URL, JSON payload, timeout a finální
+  backend odpověď bez fallbacku.
+- Smoke test `main.py` ověřil použití finální backend odpovědi a desktopový
+  fallback při `runtime_unavailable` pro textový i přepsaný hlasový vstup.
+- API smoke test nad in-memory backendem ověřil `POST /api/v1/messages`,
+  `conversation_id`, `client_id="telegram:123"`, kanál `telegram` a očekávaný
+  stav `runtime_unavailable`.
+- Prošel jsem `docs/localization/CHECKLIST.md` v rozsahu relevantním pro změnu
+  Telegram feature a backend klienta.
+
+Známé omezení:
+
+- Backend zatím negeneruje živou agentní odpověď. Dokud `AgentRuntime` vrací
+  `runtime_unavailable` nebo `not_implemented`, Telegram používá desktopový
+  fallback. Další část `MIG-005` je připojení živého runtime přímo k backendu.
+
+## 2026-06-21 — ARCH-013 — Embedded backend s živým agentním runtime
+
+Stav: `DONE`
+
+Provedeno:
+
+- Backend `AgentRuntime` nyní podporuje volitelný live handler přes `connect()` a
+  `disconnect()`.
+- `POST /api/v1/messages` při připojeném handleru vrací skutečnou odpověď agenta se
+  stavem `ok` a ukládá ji do konverzace.
+- Samostatný backend bez live handleru dál vrací řízený stav `runtime_unavailable`.
+- FastAPI aplikace ukládá instanci runtime do `app.state.agent_runtime`, aby ji mohl
+  embedded desktop backend připojit k živé relaci.
+- Desktopová aplikace spouští embedded backend, pokud je
+  `JARVIS_EMBEDDED_BACKEND_ENABLED="true"`.
+- Po navázání Gemini Live relace se runtime handler z `main.py` zaregistruje do
+  backendu; při reconnectu nebo chybě relace se zase odpojí.
+- Telegram backend klient používá krátký connect timeout a delší read timeout, aby
+  mohl čekat na skutečnou odpověď live modelu.
+- Doplněno `ADR-017` pro embedded backend jako přechodovou architekturu.
+- `MIG-005` je označený jako dokončený; další krok je `MIG-006` — Desktop přes
+  backend.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile main.py backend\app.py backend\api.py backend\services\agent_runtime.py features\002_telegram_bridge\backend_client.py`
+- Smoke test `AgentRuntime` ověřil připojený async live handler, stav `ok` a uložení
+  zpráv do in-memory repository.
+- FastAPI smoke test ověřil `app.state.agent_runtime.connect(...)`, stav
+  `agent_runtime.connected=true` v `/api/v1/status` a skutečnou odpověď přes
+  `/api/v1/messages`.
+- Smoke test Telegram backend klienta ověřil dvojici timeoutů
+  `(connect_timeout, read_timeout)`.
+- Prošel jsem `docs/localization/CHECKLIST.md` v rozsahu relevantním pro backend a
+  Telegram runtime změnu.
+
+Známé omezení:
+
+- Embedded backend je přechodová architektura. Živá agentní orchestrace pořád běží
+  v desktopovém procesu. Samostatný backend bez desktop handleru dál vrací
+  `runtime_unavailable`.
+
+## 2026-06-21 — ARCH-014 — Desktop textový vstup přes backend
+
+Stav: `DONE`
+
+Provedeno:
+
+- Přidán obecný HTTP klient `backend.client` pro `POST /api/v1/messages`.
+- Desktopový textový vstup z dashboardu nyní používá backend API jako první cestu s
+  `channel="desktop"` a `client_id` ve tvaru `desktop:{session_id}`.
+- Desktopová textová relace si ukládá backend `conversation_id` a posílá ho v
+  navazujících zprávách.
+- Při vypnutém, nedostupném nebo přechodovém backendu zůstává zachovaný přímý
+  fallback do současné Gemini Live session.
+- Live handler rozlišuje desktopové a Telegram požadavky: desktopové požadavky
+  zachovávají lokální audio/TTS, Telegram požadavky ho dál potlačují.
+- Doplněny konfigurační proměnné `JARVIS_BACKEND_CLIENT_ENABLED`,
+  `JARVIS_BACKEND_BASE_URL`, `JARVIS_BACKEND_CONNECT_TIMEOUT_SECONDS` a
+  `JARVIS_BACKEND_TIMEOUT_SECONDS` do `.env.example`.
+- `MIG-006` je označený jako `IN PROGRESS`, protože audio a další ztenčení
+  `main.py` zůstává navazující práce.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile main.py backend\client.py backend\app.py backend\api.py backend\services\agent_runtime.py features\002_telegram_bridge\backend_client.py features\002_telegram_bridge\bridge.py`
+- Smoke test `BackendClient` ověřil URL, JSON payload, `conversation_id` a timeouty
+  pro desktopový `POST /api/v1/messages`.
+- Izolovaný smoke test `main.py` ověřil desktopový fallback při `runtime_unavailable`
+  a ukládání backend `conversation_id`.
+- Smoke test pending odpovědí ověřil, že desktopový backend požadavek nepotlačuje
+  lokální audio/TTS, zatímco Telegram požadavek ano.
+- Prošel jsem `docs/localization/CHECKLIST.md` v rozsahu relevantním pro backend
+  klienta a desktopový textový vstup.
+
+Známé omezení:
+
+- Desktopový text už používá backend jako první cestu, ale audio, mikrofon a živá
+  agentní orchestrace zatím fyzicky zůstávají v `main.py`. Jejich přesun závisí na
+  navazujícím realtime kontraktu v `MIG-007`.
+
+## 2026-06-21 — ARCH-015 — Realtime WebSocket kontrakt backendu
+
+Stav: `DONE`
+
+Provedeno:
+
+- Přidán realtime event model `RealtimeEvent` s poli pro stav, text a budoucí audio.
+- Přidán `backend/services/realtime.py` s `RealtimeEventHub` pro WebSocket klienty.
+- Přidán WebSocket endpoint `/api/v1/realtime`.
+- WebSocket po připojení posílá `hello` event se `schema_version="realtime.v1"`.
+- `/api/v1/status` vrací `realtime.schema_version` a počet připojených klientů.
+- `AgentRuntime` publikuje `runtime_state` při připojení a odpojení live handleru.
+- `POST /api/v1/messages` publikuje realtime `message` eventy pro uživatelský i
+  asistentův turn.
+- `MIG-007` je označený jako `IN PROGRESS`, protože skutečný audio stream a klientské
+  řídicí příkazy zůstávají navazující práce.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile backend\schemas.py backend\services\realtime.py backend\services\agent_runtime.py backend\api.py backend\app.py`
+- WebSocket smoke test ověřil `hello`, realtime stav v `/api/v1/status`, `message`
+  eventy po `POST /api/v1/messages` a `pong` odpověď na `ping`.
+- Smoke test runtime stavu ověřil `runtime_state` event po `AgentRuntime.connect(...)`.
+- Prošel jsem `docs/localization/CHECKLIST.md` v rozsahu relevantním pro backend
+  realtime kontrakt.
+
+Známé omezení:
+
+- WebSocket zatím neposílá reálné audio bloky a nepřijímá klientské řídicí příkazy
+  kromě jednoduchého `ping`. Typ `audio` a audio pole jsou připravené pro navazující
+  implementaci.
+
+## 2026-06-21 — ARCH-016 — Desktop realtime klient nad backendem
+
+Stav: `DONE`
+
+Provedeno:
+
+- Přidán `backend/realtime_client.py` jako synchronní WebSocket klient pro
+  `/api/v1/realtime`.
+- Doplněna explicitní závislost `websockets` do `requirements.txt`.
+- Doplněna konfigurace `JARVIS_BACKEND_REALTIME_ENABLED`,
+  `JARVIS_BACKEND_REALTIME_URL`, `JARVIS_BACKEND_REALTIME_OPEN_TIMEOUT_SECONDS` a
+  `JARVIS_BACKEND_REALTIME_RECONNECT_SECONDS` do `.env.example`.
+- Desktopová aplikace spouští realtime klienta po startu embedded backendu.
+- `main.py` zpracovává `hello`, `runtime_state` a `message` eventy.
+- Konverzační řádky jsou deduplikované proti současnému lokálnímu logování, aby
+  dashboard nezobrazil stejný user nebo assistant turn dvakrát.
+- Přechodové assistant eventy se stavem `runtime_unavailable`, `not_implemented` a
+  `runtime_error` se nelogují jako běžná odpověď, protože je řeší desktop fallback.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile main.py backend\realtime_client.py backend\client.py backend\api.py backend\app.py backend\schemas.py backend\services\realtime.py backend\services\agent_runtime.py`
+- Smoke test `BackendRealtimeClient` ověřil odvození WebSocket URL, explicitní
+  realtime URL a parsování JSON eventů.
+- Smoke test `main.py` ověřil `hello`, `message`, deduplikaci zpráv a filtrování
+  `runtime_unavailable` odpovědi.
+- Smoke test ověřil signaturu `websockets.sync.client.connect` pro použité timeouty.
+- Prošel jsem `docs/localization/CHECKLIST.md` v rozsahu relevantním pro desktopový
+  realtime klient.
+
+Známé omezení:
+
+- Desktop UI je připojené jako realtime klient, ale lokální logovací cesty v
+  `main.py` zatím zůstávají kvůli kompatibilitě audio a Gemini Live smyček. Reálný
+  audio stream a klientské řídicí příkazy jsou další část `MIG-007`.
+
+## 2026-06-21 — ARCH-017 — Realtime-first logování desktopových textů
+
+Stav: `DONE`
+
+Provedeno:
+
+- Desktopový realtime klient nyní sleduje aktivní `hello` handshake a při reconnectu
+  přepíná logování zpět na lokální fallback.
+- `main.py` při aktivním realtime spojení nezapisuje desktopový user turn okamžitě
+  lokálně; zobrazuje ho backend `message` event.
+- Desktopová assistant odpověď z Live session se při aktivním realtime spojení také
+  zobrazuje přes backend `message` event.
+- Při nedostupném backendu, chybě backend HTTP klienta nebo neaktivním WebSocket
+  spojení zůstává lokální fallback logování.
+- Hlasové turny zůstávají lokálně logované, dokud nebude hotový realtime audio/text
+  kontrakt pro mikrofonní cestu.
+
+Ověření:
+
+- `.\.venv\Scripts\python.exe -m py_compile main.py backend\realtime_client.py backend\client.py backend\api.py backend\app.py backend\schemas.py backend\services\realtime.py backend\services\agent_runtime.py`
+- Smoke test `main.py` ověřil, že desktop source používá realtime logování jen při
+  aktivním handshake.
+- Smoke test ověřil, že reconnect realtime klienta vypne realtime-first logování.
+- Smoke test ověřil, že při chybě backend klienta zůstává lokální fallback log s
+  uživatelským textem a chybou nepřipraveného spojení.
+- Prošel jsem `docs/localization/CHECKLIST.md` v rozsahu relevantním pro desktopové
+  realtime logování.
+
+Známé omezení:
+
+- Realtime-first režim se týká desktopových textových turnů. Hlasové vstupy,
+  přehrávání a audio fronty zatím zůstávají v lokální cestě `main.py`.

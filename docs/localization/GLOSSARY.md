@@ -51,6 +51,12 @@
 | Shared runtime foundation | Sdílený runtime základ |
 | Agent backend | Agentní backend |
 | Agent runtime | Agentní runtime |
+| Backend client | Backend klient |
+| Desktop fallback | Desktopový fallback |
+| Embedded backend | Embedded backend / vložený backend |
+| Live handler | Live handler / živý obslužný handler |
+| Realtime event | Realtime událost / událost v reálném čase |
+| WebSocket | WebSocket / realtime spojení |
 | Specialized agent | Specializovaný agent |
 | Server backend | Serverový backend / serverová vrstva |
 | Mobile client | Mobilní klient |

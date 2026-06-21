@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from .config import BackendSettings
 from .database import check_database
@@ -20,15 +20,25 @@ from .schemas import (
     ShortTermMemoryItem,
 )
 from .services.agent_runtime import AgentRuntime
+from .services.conversations import ConversationRepository
+from .services.memory import MemoryRepository
 from .services.memory_migration import import_sqlite_memory
+from .services.realtime import RealtimeEventHub
 from .storage import create_conversation_repository, create_memory_repository
 
 
-def create_api_router(settings: BackendSettings) -> APIRouter:
+def create_api_router(
+    settings: BackendSettings,
+    conversations: ConversationRepository | None = None,
+    memory: MemoryRepository | None = None,
+    agent_runtime: AgentRuntime | None = None,
+    realtime_events: RealtimeEventHub | None = None,
+) -> APIRouter:
     router = APIRouter(prefix=settings.api_prefix)
-    conversations = create_conversation_repository(settings)
-    memory = create_memory_repository(settings)
-    agent_runtime = AgentRuntime(conversations)
+    conversations = conversations or create_conversation_repository(settings)
+    memory = memory or create_memory_repository(settings)
+    realtime_events = realtime_events or RealtimeEventHub()
+    agent_runtime = agent_runtime or AgentRuntime(conversations, realtime_events=realtime_events)
 
     @router.get("/health")
     async def health() -> dict:
@@ -49,12 +59,36 @@ def create_api_router(settings: BackendSettings) -> APIRouter:
                 "connected": agent_runtime.state.connected,
                 "detail": agent_runtime.state.detail,
             },
+            "realtime": {
+                "schema_version": realtime_events.schema_version,
+                "connected_clients": realtime_events.connected_count,
+            },
             "database": {
                 "configured": database.configured,
                 "ok": database.ok,
                 "detail": database.detail,
             },
         }
+
+    @router.websocket("/realtime")
+    async def realtime(websocket: WebSocket) -> None:
+        await realtime_events.connect(websocket)
+        try:
+            while True:
+                message = await websocket.receive_text()
+                if message.strip().lower() == "ping":
+                    await websocket.send_json(
+                        realtime_events.serialize(
+                            realtime_events.create_event(
+                                "pong",
+                                payload={"message": "pong"},
+                            )
+                        )
+                    )
+        except WebSocketDisconnect:
+            pass
+        finally:
+            await realtime_events.disconnect(websocket)
 
     @router.post("/messages", response_model=MessageResponse)
     async def create_message(message: MessageRequest) -> MessageResponse:
